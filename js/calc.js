@@ -93,19 +93,21 @@
 
   /**
    * Statut d'une ligne du portefeuille.
-   * ligne : { quantite, prixRevient, cours, objectif, solvabilite }
+   * ligne : { quantite, prixRevient, cours, objectif, solvabilite, bilanSolide }
+   * `solvabilite` est un ratio (0,88) ; `bilanSolide` est le « Oui / Non » de la revue (true, false ou null).
    * L'ordre des règles est celui du fichier Excel.
    */
   function statutLigne(ligne, params) {
     const p = Object.assign({}, PARAMETRES, params);
-    const { quantite, prixRevient, cours, objectif, solvabilite } = ligne;
+    const { quantite, prixRevient, cours, objectif, solvabilite, bilanSolide } = ligne;
     if (![quantite, prixRevient, cours, objectif].every((v) => estNombre(v) && v > 0)) return STATUTS.A_COMPLETER;
     // Bilan dégradé : on réexamine le dossier avant toute autre décision.
-    if (estNombre(solvabilite) && solvabilite < p.solvabiliteMin) return STATUTS.REEXAMINER;
+    const solvabiliteFaible = estNombre(solvabilite) && solvabilite < p.solvabiliteMin;
+    if (bilanSolide === false || solvabiliteFaible) return STATUTS.REEXAMINER;
     if (cours >= objectif || objectif / cours - 1 < p.seuilVentePotentiel - EPS) return STATUTS.VENDRE;
     if (cours / prixRevient - 1 <= p.seuilRenforcement + EPS) {
-      // On ne propose de renforcer que si la solvabilité est connue et suffisante.
-      return estNombre(solvabilite) ? STATUTS.RENFORCER : STATUTS.REEXAMINER;
+      // On ne propose de renforcer que si la solidité du bilan a été vérifiée.
+      return estNombre(solvabilite) || bilanSolide === true ? STATUTS.RENFORCER : STATUTS.REEXAMINER;
     }
     return STATUTS.GARDER;
   }

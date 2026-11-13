@@ -19,26 +19,66 @@
         <p class="marque-nom">Chasseur de décotes</p>
         <p class="marque-sous">Suivi de portefeuille Net-Net</p>
       </div>
+      <button type="button" class="bouton-entete" id="verrouiller" hidden>Verrouiller</button>
     </div>
-    <nav class="onglets" aria-label="Sections">
-      <button type="button" class="onglet" data-vue="tableau" aria-current="page">Tableau de bord</button>
-      <button type="button" class="onglet" data-vue="analyse">Analyse société</button>
+    <nav class="onglets" id="onglets" aria-label="Sections" hidden>
+      <button type="button" class="onglet" data-vue="tableau" aria-current="page">Tableau</button>
+      <button type="button" class="onglet" data-vue="analyse">Analyse</button>
+      <button type="button" class="onglet" data-vue="donnees">Données</button>
     </nav>
   </div>
 </header>
 
-<main>
+<!-- ============ Écran de verrouillage ============ -->
+<section id="verrou" class="verrou">
+  <div class="bloc verrou-carte">
+    <h1 id="verrou-titre"></h1>
+    <p class="note" id="verrou-texte"></p>
+    <p class="message" id="verrou-message" role="alert" hidden></p>
+
+    <form id="f-creer" class="pile" autocomplete="off" hidden>
+      <div class="champ large"><label for="mdp-nouveau">Mot de passe (10 caractères au moins)</label>
+        <input id="mdp-nouveau" type="password" autocomplete="new-password" required></div>
+      <div class="champ large"><label for="mdp-confirmation">Confirmez le mot de passe</label>
+        <input id="mdp-confirmation" type="password" autocomplete="new-password" required></div>
+      <p class="avertissement">Ce mot de passe n'est enregistré nulle part et ne peut pas être retrouvé. Si vous l'oubliez, vos données sont perdues : notez-le dans un gestionnaire de mots de passe.</p>
+      <button type="submit" class="bouton principal">Créer mon portefeuille</button>
+    </form>
+
+    <form id="f-ouvrir" class="pile" hidden>
+      <div class="champ large"><label for="mdp">Mot de passe</label>
+        <input id="mdp" type="password" autocomplete="current-password" required></div>
+      <button type="submit" class="bouton principal">Déverrouiller</button>
+    </form>
+
+    <form id="f-restaurer" class="pile" hidden>
+      <p class="note" id="restaurer-fichier"></p>
+      <div class="champ large"><label for="mdp-sauvegarde">Mot de passe de cette sauvegarde</label>
+        <input id="mdp-sauvegarde" type="password" autocomplete="current-password" required></div>
+      <button type="submit" class="bouton principal">Restaurer cette sauvegarde</button>
+      <button type="button" class="bouton" id="restaurer-annuler">Annuler</button>
+    </form>
+
+    <div class="pile" id="verrou-secondaire">
+      <label class="bouton fichier">Restaurer une sauvegarde<input type="file" id="fichier-sauvegarde" accept=".json,.txt,application/json,text/plain"></label>
+      <button type="button" class="bouton" id="demo">Voir la démonstration</button>
+      <button type="button" class="bouton danger" id="effacer-verrou" hidden>Effacer les données de ce navigateur</button>
+    </div>
+  </div>
+</section>
+
+<main id="appli" hidden>
   <!-- ============ Tableau de bord ============ -->
   <section id="vue-tableau" class="vue">
-    <p class="bandeau" id="bandeau-demo">Données de démonstration : sociétés fictives. Rien n'est enregistré ni envoyé.</p>
-
+    <p class="bandeau" id="bandeau" hidden></p>
     <div class="indicateurs" id="indicateurs"></div>
-
     <div class="bloc">
       <div class="bloc-titre">
         <h2>Portefeuille</h2>
         <p class="note" id="resume-lignes"></p>
+        <button type="button" class="bouton" id="ajouter-ligne">Ajouter une ligne</button>
       </div>
+      <p class="note" id="aucune-ligne" hidden>Aucune ligne pour l'instant. Ajoutez votre première action, ou importez vos lignes depuis l'onglet Données.</p>
       <div class="tableau-cadre">
         <table class="lignes" id="lignes">
           <thead>
@@ -51,13 +91,13 @@
               <th scope="col" class="num">Potentiel</th>
               <th scope="col" class="num">Poids</th>
               <th scope="col">Statut</th>
+              <th scope="col"><span class="invisible">Actions</span></th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
     </div>
-
     <details class="bloc repli">
       <summary><h2>Règles appliquées</h2></summary>
       <dl class="regles" id="regles"></dl>
@@ -78,13 +118,87 @@
         <div class="bloc"><h3>Filtres</h3><ul class="filtres" id="filtres"></ul></div>
         <p class="note">Reste à vérifier à la main : flux de trésorerie, quatre ratios de la direction sur huit ans, raison de la décote.</p>
         <div class="actions">
+          <button type="button" class="bouton principal" id="vers-portefeuille">Ajouter au portefeuille</button>
           <button type="button" class="bouton" id="reinitialiser">Recharger Alpha Industrie</button>
           <button type="button" class="bouton" id="vider">Vider le formulaire</button>
         </div>
       </div>
     </div>
   </section>
+
+  <!-- ============ Données ============ -->
+  <section id="vue-donnees" class="vue" hidden>
+    <p class="bandeau" id="bandeau-donnees" hidden></p>
+    <div class="grille-donnees">
+      <div class="bloc">
+        <h2>Paramètres</h2>
+        <form id="f-parametres" class="pile" autocomplete="off" novalidate>
+          <div class="champ"><label for="p-capital">Capital de départ (€)</label><input id="p-capital" type="text" inputmode="decimal"></div>
+          <div class="champ"><label for="p-cash">Cash disponible (€)</label><input id="p-cash" type="text" inputmode="decimal"></div>
+          <p class="note" id="parametres-etat" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <div class="bloc">
+        <h2>Sauvegarde chiffrée</h2>
+        <p class="note" id="sauvegarde-etat"></p>
+        <div class="pile">
+          <button type="button" class="bouton principal" id="exporter">Exporter la sauvegarde</button>
+          <label class="bouton fichier">Restaurer une sauvegarde<input type="file" id="fichier-sauvegarde-2" accept=".json,.txt,application/json,text/plain"></label>
+        </div>
+        <p class="note">Le fichier exporté est chiffré avec votre mot de passe. Conservez-en une copie hors de ce navigateur : vider les données de navigation efface le portefeuille.</p>
+      </div>
+
+      <div class="bloc">
+        <h2>Importer des lignes (CSV)</h2>
+        <p class="note">Dans Excel, ouvrez l'onglet Portefeuille puis « Fichier &gt; Enregistrer sous » au format « CSV UTF-8 ». Colonnes reconnues : Société, Code, Quantité, Prix de revient, Objectif, et celles de votre fichier de suivi.</p>
+        <div class="pile">
+          <label class="bouton fichier">Choisir un fichier CSV<input type="file" id="fichier-csv" accept=".csv,.txt,text/csv,text/plain"></label>
+        </div>
+        <div id="csv-resultat" class="pile" aria-live="polite" hidden>
+          <p id="csv-resume"></p>
+          <ul class="liste-fine" id="csv-ignorees"></ul>
+          <div class="actions">
+            <button type="button" class="bouton principal" id="csv-valider"></button>
+            <button type="button" class="bouton" id="csv-annuler">Annuler</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bloc">
+        <h2>Effacer</h2>
+        <p class="note">Supprime le portefeuille enregistré dans ce navigateur. Exportez d'abord une sauvegarde si vous voulez le retrouver.</p>
+        <div class="pile"><button type="button" class="bouton danger" id="effacer">Effacer toutes les données</button></div>
+      </div>
+    </div>
+  </section>
 </main>
+
+<!-- ============ Fiche d'une ligne ============ -->
+<dialog id="dlg-ligne" class="dialogue">
+  <form id="f-ligne" autocomplete="off" novalidate>
+    <h2 id="ligne-titre"></h2>
+    <div class="champ large"><label for="l-nom">Société</label><input id="l-nom" type="text" maxlength="120"></div>
+    <div class="deux">
+      <div class="champ large"><label for="l-code">Code bourse</label><input id="l-code" type="text" maxlength="24"></div>
+      <div class="champ large"><label for="l-enveloppe">Enveloppe</label><select id="l-enveloppe"><option>PEA</option><option>CTO</option></select></div>
+      <div class="champ large"><label for="l-quantite">Nombre d'actions</label><input id="l-quantite" type="text" inputmode="decimal"></div>
+      <div class="champ large"><label for="l-prixRevient">Prix de revient (€)</label><input id="l-prixRevient" type="text" inputmode="decimal"></div>
+      <div class="champ large"><label for="l-cours">Cours actuel (€)</label><input id="l-cours" type="text" inputmode="decimal"></div>
+      <div class="champ large"><label for="l-objectif">Objectif de vente (€)</label><input id="l-objectif" type="text" inputmode="decimal"></div>
+      <div class="champ large"><label for="l-solvabilite">Solvabilité maison (%)</label><input id="l-solvabilite" type="text" inputmode="decimal"></div>
+      <div class="champ large"><label for="l-bilanSolide">Bilan toujours solide ?</label><select id="l-bilanSolide"><option value="">Non renseigné</option><option value="oui">Oui</option><option value="non">Non</option></select></div>
+    </div>
+    <div class="champ large"><label for="l-dateResultats">Prochaine publication de résultats</label><input id="l-dateResultats" type="date"></div>
+    <div class="champ large"><label for="l-notes">Thèse et notes</label><textarea id="l-notes" rows="3" maxlength="2000"></textarea></div>
+    <p class="message" id="ligne-message" role="alert" hidden></p>
+    <div class="actions">
+      <button type="submit" class="bouton principal">Enregistrer</button>
+      <button type="button" class="bouton" id="ligne-annuler">Annuler</button>
+      <button type="button" class="bouton danger" id="ligne-supprimer">Supprimer</button>
+    </div>
+  </form>
+</dialog>
 
 <footer class="pied">
   <p id="etat-tests" class="tests"></p>
@@ -92,6 +206,9 @@
 </footer>
 
 <script src="js/calc.js"></script>
+<script src="js/donnees.js"></script>
+<script src="js/coffre.js"></script>
+<script src="js/csv.js"></script>
 <script src="js/tests.js"></script>
 <script src="js/app.js"></script>
 </body>
