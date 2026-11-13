@@ -1,0 +1,13 @@
+# Sécurité : aucune donnée personnelle ne doit entrer dans ce dépôt public.
+# Les sauvegardes, exports et fichiers de suivi restent sur votre ordinateur.
+*.xlsx
+*.xls
+*.csv
+*.json
+*.sauvegarde
+*.backup
+donnees/
+data/
+.env
+.DS_Store
+_apercu.html

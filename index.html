@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Sécurité : la page ne charge que ses propres fichiers et ne contacte aucun autre site. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<title>Chasseur de décotes</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="entete">
+  <div class="entete-int">
+    <div class="marque">
+      <span class="logo" aria-hidden="true"></span>
+      <div>
+        <p class="marque-nom">Chasseur de décotes</p>
+        <p class="marque-sous">Suivi de portefeuille Net-Net</p>
+      </div>
+    </div>
+    <nav class="onglets" aria-label="Sections">
+      <button type="button" class="onglet" data-vue="tableau" aria-current="page">Tableau de bord</button>
+      <button type="button" class="onglet" data-vue="analyse">Analyse société</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- ============ Tableau de bord ============ -->
+  <section id="vue-tableau" class="vue">
+    <p class="bandeau" id="bandeau-demo">Données de démonstration : sociétés fictives. Rien n'est enregistré ni envoyé.</p>
+
+    <div class="indicateurs" id="indicateurs"></div>
+
+    <div class="bloc">
+      <div class="bloc-titre">
+        <h2>Portefeuille</h2>
+        <p class="note" id="resume-lignes"></p>
+      </div>
+      <div class="tableau-cadre">
+        <table class="lignes" id="lignes">
+          <thead>
+            <tr>
+              <th scope="col">Société</th>
+              <th scope="col" class="num">Cours</th>
+              <th scope="col" class="num">Prix de revient</th>
+              <th scope="col" class="num">Performance</th>
+              <th scope="col" class="num">Objectif</th>
+              <th scope="col" class="num">Potentiel</th>
+              <th scope="col" class="num">Poids</th>
+              <th scope="col">Statut</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <details class="bloc repli">
+      <summary><h2>Règles appliquées</h2></summary>
+      <dl class="regles" id="regles"></dl>
+    </details>
+  </section>
+
+  <!-- ============ Analyse société ============ -->
+  <section id="vue-analyse" class="vue" hidden>
+    <div class="bloc-titre">
+      <h2>Analyse d'une société avant achat</h2>
+      <p class="note">Montants en millions d'euros, cours en euros. Prérempli avec le cas d'école Alpha Industrie (fictif).</p>
+    </div>
+    <div class="analyse">
+      <form id="formulaire" class="bloc saisie" autocomplete="off" novalidate></form>
+      <div class="resultats">
+        <div class="bloc verdict" id="verdict" aria-live="polite"></div>
+        <div class="bloc"><h3>Les valeurs</h3><dl class="valeurs" id="valeurs"></dl></div>
+        <div class="bloc"><h3>Filtres</h3><ul class="filtres" id="filtres"></ul></div>
+        <p class="note">Reste à vérifier à la main : flux de trésorerie, quatre ratios de la direction sur huit ans, raison de la décote.</p>
+        <div class="actions">
+          <button type="button" class="bouton" id="reinitialiser">Recharger Alpha Industrie</button>
+          <button type="button" class="bouton" id="vider">Vider le formulaire</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="pied">
+  <p id="etat-tests" class="tests"></p>
+  <p>Outil personnel d'application d'une méthode. Il ne constitue pas un conseil en investissement.</p>
+</footer>
+
+<script src="js/calc.js"></script>
+<script src="js/tests.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
