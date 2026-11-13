@@ -72,12 +72,13 @@
     objectif: /^objectif( de vente)?$/,
     cours: /^(cours|cours actuel|dernier cours)$/,
     enveloppe: /^(enveloppe|compte)$/,
+    place: /^(place de cotation|place|marche|bourse)$/,
     bilanSolide: /^bilan toujours solide$/,
     dateResultats: /^(prochaine publication|date des resultats|date resultats)$/,
     notes: /^(these et notes|notes|these|commentaire|commentaires)$/,
   };
   const INTITULES = { nom: "Société", code: "Code", quantite: "Quantité", prixRevient: "Prix de revient", objectif: "Objectif",
-    cours: "Cours", enveloppe: "Enveloppe", bilanSolide: "Bilan solide", dateResultats: "Prochaine publication", notes: "Notes" };
+    cours: "Cours", enveloppe: "Enveloppe", place: "Place de cotation", bilanSolide: "Bilan solide", dateResultats: "Prochaine publication", notes: "Notes" };
 
   /**
    * Extrait les lignes de portefeuille d'un texte CSV.
@@ -109,7 +110,7 @@
       if (quantite === null || quantite <= 0) { ignorees.push({ numero, raison: `${nom} : quantité absente ou illisible` }); continue; }
       const solide = simplifier(c("bilanSolide"));
       lignes.push({
-        nom, code: c("code"), enveloppe: c("enveloppe"), quantite,
+        nom, code: c("code"), place: c("place"), enveloppe: c("enveloppe"), quantite,
         prixRevient: lireNombre(c("prixRevient")), objectif: lireNombre(c("objectif")), cours: lireNombre(c("cours")),
         bilanSolide: solide === "oui" ? true : solide === "non" ? false : null,
         dateResultats: lireDate(c("dateResultats")), notes: c("notes"),

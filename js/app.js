@@ -1,8 +1,10 @@
-/* Interface : verrouillage, tableau de bord, analyse, gestion des données.
-   La logique métier est dans calc.js, le chiffrement dans coffre.js, le format dans donnees.js, le CSV dans csv.js. */
+/* Interface : verrouillage, tableau de bord, analyse, journal, gestion des données.
+   La logique métier est dans calc.js, le chiffrement dans coffre.js, le format dans donnees.js, le CSV dans csv.js,
+   les requêtes réseau dans reseau.js et la logique du journal dans journal.js. Ce fichier ne fait qu'afficher et relier. */
 (function () {
   "use strict";
   const D = window.Decotes, Donnees = window.DecotesDonnees, Coffre = window.DecotesCoffre, CSV = window.DecotesCSV;
+  const Reseau = window.DecotesReseau, Journal = window.DecotesJournal;
   const P = D.PARAMETRES;
   const $ = (id) => document.getElementById(id);
   const TAILLE_MAX_FICHIER = 5 * 1024 * 1024;
@@ -16,6 +18,8 @@
     aRestaurer: null,      // enveloppe lue dans un fichier, en attente du mot de passe
     importCSV: null,       // lignes lues dans un CSV, en attente de validation
     ligneEnCours: null,    // identifiant de la ligne ouverte dans la fiche
+    actualisation: null,   // AbortController de l'actualisation des cours en cours
+    apercuOperation: null, // opération préparée, en attente de confirmation
   };
   let stockage = null;
   try { stockage = window.localStorage; } catch (e) { stockage = null; }
@@ -28,11 +32,18 @@
   const fPct0 = new Intl.NumberFormat("fr-FR", { style: "percent", maximumFractionDigits: 0 });
   const fNb = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
   const fDate = new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short" });
+  const fJour = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
+  const fJourAn = new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const fQte = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 4 });
   const vide = "–";
   const estNombre = (v) => typeof v === "number" && Number.isFinite(v);
   const fmt = (f, v) => (estNombre(v) ? f.format(v) : vide);
   const signe = (v) => (estNombre(v) ? (v > 0 ? "+" : "") + fPct.format(v) : vide);
   const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? "s" : ""}`;
+  /** « 2027-01-06 » → objet Date à minuit, heure locale. */
+  const versDate = (iso) => { const [a, m, j] = String(iso).split("-").map(Number); return new Date(a, m - 1, j); };
+  const jourCourt = (iso) => (iso ? fJour.format(versDate(iso)) : null);
+  const placeCourte = (cle) => (cle && cle !== "AUTRE" && Donnees.PLACES[cle] ? Donnees.PLACES[cle].replace("Euronext ", "").replace(/ \(.*\)$/, "") : null);
   const versChamp = (v) => (estNombre(v) ? String(Math.round(v * 1e6) / 1e6).replace(".", ",") : "");
 
   function el(balise, attrs, enfants) {
@@ -121,10 +132,15 @@
 
   function verrouiller(texteMessage) {
     if ($("dlg-ligne").open) $("dlg-ligne").close();
+    if ($("dlg-operation").open) $("dlg-operation").close();
+    if (etat.actualisation) etat.actualisation.abort();
+    etat.apercuOperation = null;
     etat.pf = null; etat.session = null; etat.mode = "verrou"; etat.importCSV = null; etat.ligneEnCours = null;
     clearTimeout(minuterie);
     // On vide l'affichage : plus aucune donnée déchiffrée ne reste dans la page.
     $("lignes").tBodies[0].replaceChildren(); $("indicateurs").replaceChildren();
+    $("operations").tBodies[0].replaceChildren(); $("journal-totaux").replaceChildren();
+    $("rapport-liste").replaceChildren(); $("rapport-cours").hidden = true;
     afficherVerrou(null, texteMessage);
   }
 
@@ -254,13 +270,19 @@
   }
   function portefeuilleDemo() {
     return Donnees.normaliser({
-      version: 1, parametres: { capitalDepart: 10000, cash: 7850 }, journal: [],
+      version: 1, parametres: { capitalDepart: 10000, cash: 7850, relais: "" },
       lignes: [
-        { nom: "Alpha Industrie", code: "ALPH", enveloppe: "PEA", quantite: 100, prixRevient: 3.5, cours: 3.8, objectif: 7.5, solvabilite: 0.881, dateResultats: dansJours(9) },
-        { nom: "Bêta Textile", code: "BETA", enveloppe: "PEA", quantite: 40, prixRevient: 9.2, cours: 15.4, objectif: 16, solvabilite: 0.62, dateResultats: dansJours(70) },
-        { nom: "Gamma Outillage", code: "GAMM", enveloppe: "PEA", quantite: 140, prixRevient: 4.1, cours: 3.15, objectif: 8.2, solvabilite: 0.55, dateResultats: dansJours(40) },
-        { nom: "Delta Négoce", code: "DELT", enveloppe: "CTO", quantite: 60, prixRevient: 6, cours: 5.1, objectif: 10.5, solvabilite: 0.31, dateResultats: dansJours(25) },
-        { nom: "Epsilon Papiers", code: "EPSI", enveloppe: "PEA", quantite: 70, prixRevient: 5.4, cours: 5.9 },
+        { nom: "Alpha Industrie", code: "ALPH", place: "XPAR", enveloppe: "PEA", quantite: 100, prixRevient: 3.5, cours: 3.8, dateCours: dansJours(-1), objectif: 7.5, solvabilite: 0.881, dateResultats: dansJours(9) },
+        { nom: "Bêta Textile", code: "BETA", place: "XPAR", enveloppe: "PEA", quantite: 40, prixRevient: 9.2, cours: 15.4, dateCours: dansJours(-1), objectif: 16, solvabilite: 0.62, dateResultats: dansJours(70) },
+        { nom: "Gamma Outillage", code: "GAMM", place: "XBRU", enveloppe: "PEA", quantite: 140, prixRevient: 4.1, cours: 3.15, dateCours: dansJours(-1), objectif: 8.2, solvabilite: 0.55, dateResultats: dansJours(40) },
+        { nom: "Delta Négoce", code: "DELT", place: "XOSL", enveloppe: "CTO", quantite: 60, prixRevient: 6, cours: 5.1, dateCours: dansJours(-1), objectif: 10.5, solvabilite: 0.31, dateResultats: dansJours(25) },
+        { nom: "Epsilon Papiers", code: "EPSI", place: "XPAR", enveloppe: "PEA", quantite: 70, prixRevient: 5.4, cours: 5.9 },
+      ],
+      journal: [
+        { date: dansJours(-60), type: "achat", nom: "Alpha Industrie", code: "ALPH", quantite: 100, prix: 3.48, frais: 2, total: 350 },
+        { date: dansJours(-45), type: "achat", nom: "Bêta Textile", code: "BETA", quantite: 40, prix: 9.15, frais: 2, total: 368 },
+        { date: dansJours(-20), type: "vente", nom: "Omega Verrerie", code: "OMEG", quantite: 50, prix: 12.4, frais: 2, total: 618, plusValue: 203 },
+        { date: dansJours(-10), type: "dividende", nom: "Bêta Textile", code: "BETA", quantite: 40, prix: 0.35, frais: 4.2, total: 9.8 },
       ],
     });
   }
@@ -276,7 +298,7 @@
 
   function afficherBandeaux(texte, info) {
     const demo = etat.mode === "demo" ? "Démonstration : sociétés fictives. Vos modifications ne sont pas enregistrées." : "";
-    for (const id of ["bandeau", "bandeau-donnees"]) {
+    for (const id of ["bandeau", "bandeau-donnees", "bandeau-journal"]) {
       const b = $(id); const t = texte || demo;
       b.hidden = !t; b.textContent = t;
       b.classList.toggle("alerte", !!texte && !info);
@@ -284,7 +306,7 @@
     }
   }
 
-  function toutAfficher() { afficherBandeaux(); afficherTableau(); afficherDonnees(); }
+  function toutAfficher() { afficherBandeaux(); afficherTableau(); afficherJournal(); afficherDonnees(); }
 
   // ================= Tableau de bord =================
   const CLASSE_STATUT = {
@@ -318,6 +340,10 @@
     );
 
     $("resume-lignes").textContent = `${pluriel(s.detail.length, "ligne")} · ${fmt(fEur0, s.valeurTitres)} en actions`;
+    const demo = etat.mode === "demo";
+    $("actualiser").disabled = demo || s.detail.length === 0 || !!etat.actualisation;
+    $("etat-cours").textContent = demo ? "Démonstration : actualisation des cours indisponible (sociétés fictives)."
+      : pf.coursActualisesLe ? "Cours actualisés le " + fDate.format(new Date(pf.coursActualisesLe)) + "." : "Cours saisis à la main pour l'instant.";
     $("aucune-ligne").hidden = s.detail.length > 0;
     $("lignes").hidden = s.detail.length === 0;
     const cellule = (titre, texte, classe) => el("td", { "data-titre": titre, class: classe || "num", texte });
@@ -328,7 +354,8 @@
       if (d.resultatsProches) puces.push(el("span", { class: "puce", texte: d.joursAvantResultats === 0 ? "Résultats aujourd'hui" : `Résultats dans ${d.joursAvantResultats} j` }));
       const modifier = el("button", { type: "button", class: "lien", texte: "Modifier", "aria-label": "Modifier " + l.nom });
       modifier.addEventListener("click", () => ouvrirLigne(l));
-      const sousTitre = [l.code, l.enveloppe, estNombre(l.quantite) ? pluriel(l.quantite, "titre") : null].filter(Boolean).join(" · ");
+      const sousTitre = [l.code, placeCourte(l.place), l.enveloppe, estNombre(l.quantite) ? pluriel(l.quantite, "titre") : null,
+        l.dateCours && estNombre(l.cours) ? "cours du " + jourCourt(l.dateCours) : null].filter(Boolean).join(" · ");
       return el("tr", {}, [
         el("td", { class: "c-soc" }, [el("div", { class: "soc-nom", texte: l.nom }), el("div", { class: "soc-code", texte: sousTitre })]),
         cellule("Cours", fmt(fEur, l.cours)),
@@ -364,6 +391,10 @@
     $("ligne-titre").textContent = etat.ligneEnCours ? "Modifier la ligne" : "Nouvelle ligne";
     $("l-nom").value = l.nom || ""; $("l-code").value = l.code || "";
     $("l-enveloppe").value = l.enveloppe === "CTO" ? "CTO" : "PEA";
+    $("l-place").value = l.place && Donnees.PLACES[l.place] ? l.place : Donnees.PLACE_DEFAUT;
+    $("l-dateCours").value = l.dateCours || "";
+    etat.coursInitial = estNombre(l.cours) ? l.cours : null;
+    etat.dateCoursInitiale = l.dateCours || "";
     for (const c of CHAMPS_LIGNE) {
       $("l-" + c).value = versChamp(c === "solvabilite" && estNombre(l[c]) ? l[c] * 100 : l[c]);
       $("l-" + c).classList.remove("invalide");
@@ -386,7 +417,10 @@
     if (invalide) return message("ligne-message", "Corrigez les nombres signalés en rouge.");
     const solide = $("l-bilanSolide").value;
     const ligne = Donnees.normaliserLigne(Object.assign(valeurs, {
-      id: etat.ligneEnCours, nom, code: $("l-code").value, enveloppe: $("l-enveloppe").value,
+      id: etat.ligneEnCours, nom, code: $("l-code").value, enveloppe: $("l-enveloppe").value, place: $("l-place").value,
+      // Un cours modifié à la main sans changer sa date est daté d'aujourd'hui.
+      dateCours: valeurs.cours !== null && valeurs.cours !== etat.coursInitial && $("l-dateCours").value === etat.dateCoursInitiale
+        ? Journal.aujourdhui() : $("l-dateCours").value || null,
       solvabilite: valeurs.solvabilite === null ? null : valeurs.solvabilite / 100,
       bilanSolide: solide === "oui" ? true : solide === "non" ? false : null,
       dateResultats: $("l-dateResultats").value || null, notes: $("l-notes").value,
@@ -416,6 +450,8 @@
       : `${pluriel(pf.lignes.length, "ligne")}, dernière modification le ${fDate.format(new Date(pf.modifieLe))}. ` +
         (stockageOK ? "Enregistré dans ce navigateur, chiffré (AES-GCM 256 bits)." : "Ce navigateur n'enregistre rien ici : exportez une sauvegarde avant de fermer.");
     for (const id of ["exporter", "fichier-sauvegarde-2", "effacer"]) $(id).disabled = demo;
+    $("p-relais").value = pf.parametres.relais || "";
+    $("relais-avertissement").hidden = !pf.parametres.relais;
     annulerCSV();
   }
 
@@ -470,6 +506,227 @@
     afficherBandeaux(`${pluriel(ajoutees, "ligne")} ajoutée${ajoutees > 1 ? "s" : ""} au portefeuille.${suite}`, true);
     afficherVue("tableau");
   });
+
+  // ----- Source des cours -----
+  $("f-relais").addEventListener("submit", (e) => e.preventDefault());
+  $("p-relais").addEventListener("change", () => {
+    const valeur = $("p-relais").value;
+    if (valeur && !window.confirm("Le relais corsproxy.io recevra la liste de vos codes bourse (jamais vos quantités ni vos montants) et peut l'enregistrer. Activer le relais ?")) {
+      $("p-relais").value = etat.pf.parametres.relais || ""; return;
+    }
+    etat.pf.parametres.relais = Donnees.RELAIS.includes(valeur) ? valeur : "";
+    $("relais-avertissement").hidden = !etat.pf.parametres.relais;
+    enregistrer();
+  });
+
+  // ================= Actualisation des cours =================
+  $("actualiser").addEventListener("click", async () => {
+    if (etat.mode !== "ouvert" || etat.actualisation || etat.pf.lignes.length === 0) return;
+    const pf = etat.pf;
+    const controleur = new AbortController();
+    etat.actualisation = controleur;
+    const bouton = $("actualiser");
+    bouton.disabled = true; bouton.textContent = "Actualisation…";
+    $("rapport-cours").hidden = false; $("rapport-liste").replaceChildren();
+    $("rapport-resume").textContent = "Connexion à Yahoo Finance…";
+    let rapport = null;
+    try {
+      rapport = await Reseau.actualiser(pf.lignes, {
+        relais: pf.parametres.relais, signal: controleur.signal,
+        progression: (fait, total) => { $("rapport-resume").textContent = `Actualisation : ${fait} / ${total} codes…`; },
+      });
+    } catch (e) {
+      $("rapport-resume").textContent = "Actualisation impossible : " + e.message;
+    } finally {
+      etat.actualisation = null;
+      bouton.textContent = "Actualiser les cours";
+      bouton.disabled = etat.mode !== "ouvert";
+    }
+    // Session verrouillée ou portefeuille remplacé pendant l'attente : on n'applique rien.
+    if (!rapport || etat.mode !== "ouvert" || etat.pf !== pf) return;
+    for (const r of rapport.resultats) {
+      if (!r.ok) continue;
+      const l = pf.lignes.find((x) => x.id === r.id); // une ligne supprimée entre-temps est ignorée
+      if (l) { l.cours = r.prix; l.dateCours = r.date; }
+    }
+    if (rapport.misAJour) { pf.coursActualisesLe = new Date().toISOString(); enregistrer(); }
+    afficherTableau();
+    afficherRapport(rapport);
+  });
+  $("rapport-fermer").addEventListener("click", () => { $("rapport-cours").hidden = true; });
+
+  function afficherRapport(r) {
+    let resume = `${r.misAJour} cours mis à jour sur ${pluriel(r.resultats.length, "ligne")}`;
+    if (r.echecs) resume += `, ${pluriel(r.echecs, "échec")}`;
+    if (r.ignorees) resume += `, ${r.ignorees} sans code`;
+    resume += r.echecs || r.ignorees ? ". Les lignes en échec gardent leur ancien cours." : ".";
+    if (r.diagnostic === "reseau") {
+      resume = "Yahoo Finance n'a pas pu être joint depuis cette page : soit la connexion Internet est coupée, soit Yahoo refuse les requêtes " +
+        "venant d'un site web (règle de sécurité « CORS » des navigateurs). Aucun cours n'a été modifié. Vous pouvez saisir les cours à la main " +
+        "dans chaque ligne, ou essayer le relais (onglet Données) en connaissant ses limites.";
+    } else if (r.diagnostic === "limite") {
+      resume = "Yahoo Finance limite le nombre de requêtes : l'actualisation s'est arrêtée. Réessayez dans quelques minutes. " + resume;
+    }
+    $("rapport-resume").textContent = resume + (r.relais !== "Aucun (requête directe)" ? ` Relais utilisé : ${r.relais}.` : "");
+    if (r.diagnostic === "reseau") { $("rapport-liste").replaceChildren(); return; }
+    // Les lignes à vérifier d'abord : échecs, puis variations inhabituelles.
+    const ordre = (x) => (!x.ok ? 0 : x.alerte ? 1 : 2);
+    const fOrigine = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 4 });
+    $("rapport-liste").replaceChildren(...r.resultats.slice().sort((a, b) => ordre(a) - ordre(b)).map((x) => {
+      const enfants = [el("span", { class: "r-nom", texte: x.nom })];
+      if (x.ok) {
+        enfants.push(el("span", { class: "r-valeur", texte: `${fmt(fEur, x.ancien)} → ${fEur.format(x.prix)}${estNombre(x.variation) ? " (" + signe(x.variation) + ")" : ""}` }));
+        const detail = [x.symbole, x.date ? "cours du " + jourCourt(x.date) : null, x.nomFournisseur ? "Yahoo : " + x.nomFournisseur : null,
+          x.taux ? `converti depuis ${fOrigine.format(x.prixOrigine)} ${x.devise}` : null].filter(Boolean).join(" · ");
+        enfants.push(el("span", { class: "r-detail", texte: detail }));
+        if (x.alerte) enfants.push(el("span", { class: "r-alerte", texte: `Variation de ${signe(x.variation)} depuis le dernier cours : vérifiez que le code ${x.symbole} correspond bien à cette société.` }));
+      } else {
+        enfants.push(el("span", { class: "r-valeur", texte: x.symbole || "" }));
+        enfants.push(el("span", { class: "r-erreur", texte: x.erreur }));
+      }
+      return el("li", {}, enfants);
+    }));
+  }
+
+  // ================= Journal =================
+  const LIBELLES_TYPE = { achat: "Achat", vente: "Vente", dividende: "Dividende" };
+
+  function afficherJournal() {
+    const pf = etat.pf; if (!pf) return;
+    const s = Journal.synthese(pf.journal);
+    const t = s.totaux;
+    $("journal-totaux").replaceChildren(
+      indicateur("Achats", fEur.format(t.achat), "Frais compris"),
+      indicateur("Ventes", fEur.format(t.vente), "Nettes de frais"),
+      indicateur("Dividendes", fEur.format(t.dividende), "Nets de prélèvements"),
+      indicateur("Plus-values réalisées", (t.plusValues > 0 ? "+" : "") + fEur.format(t.plusValues), `Frais payés : ${fEur.format(t.frais)}`),
+    );
+    $("journal-resume").textContent = pluriel(s.operations.length, "opération");
+    $("journal-vide").hidden = s.operations.length > 0;
+    $("operations").hidden = s.operations.length === 0;
+    const cellule = (titre, texte, classe) => el("td", { "data-titre": titre, class: classe || "num", texte });
+    $("operations").tBodies[0].replaceChildren(...s.operations.map((o) => {
+      const supprimer = el("button", { type: "button", class: "lien", texte: "Supprimer", "aria-label": `Supprimer l'opération du ${o.date}` });
+      supprimer.addEventListener("click", () => {
+        if (!window.confirm("Supprimer cette opération du journal ? Cela n'annule pas ses effets sur la ligne et sur le cash.")) return;
+        pf.journal = pf.journal.filter((x) => x.id !== o.id);
+        enregistrer(); afficherJournal();
+      });
+      const encaisse = o.type !== "achat";
+      return el("tr", {}, [
+        el("td", { class: "c-soc" }, [el("div", { class: "soc-nom", texte: o.nom || o.code }), el("div", { class: "soc-code", texte: [o.code, o.note].filter(Boolean).join(" · ") })]),
+        el("td", { class: "c-statut" }, [el("span", { class: "type t-" + o.type, texte: LIBELLES_TYPE[o.type] }), el("span", { class: "soc-code", texte: " · " + (o.date ? fJourAn.format(versDate(o.date)) : "date inconnue") })]),
+        cellule("Quantité", fmt(fQte, o.quantite)),
+        cellule(o.type === "dividende" ? "Par action" : "Prix unitaire", fmt(fEur, o.prix)),
+        cellule(o.type === "dividende" ? "Prélèvements" : "Frais", fmt(fEur, o.frais)),
+        cellule("Total", estNombre(o.total) ? (encaisse ? "+" : "−") + fEur.format(Math.abs(o.total)) : vide, "num " + (encaisse ? "hausse" : "")),
+        cellule("Plus-value", estNombre(o.plusValue) ? (o.plusValue > 0 ? "+" : "") + fEur.format(o.plusValue) : vide, "num " + (o.plusValue > 0 ? "hausse" : o.plusValue < 0 ? "baisse" : "")),
+        el("td", { class: "c-actions" }, supprimer),
+      ]);
+    }));
+  }
+
+  // ----- Saisie d'une opération : étape 1 (saisie), puis étape 2 (confirmation des mises à jour) -----
+  const typeOperation = () => document.querySelector('input[name="op-type"]:checked').value;
+
+  function etapeOperation(confirmation) {
+    $("op-saisie").hidden = confirmation;
+    $("op-confirmation").hidden = !confirmation;
+    $("op-retour").hidden = !confirmation;
+    $("op-valider").textContent = confirmation ? "Enregistrer l'opération" : "Continuer";
+    message("op-message", "");
+  }
+
+  /** Adapte les libellés au type d'opération ; montre la place et l'enveloppe pour un achat d'une nouvelle société. */
+  function ajusterOperation() {
+    const type = typeOperation();
+    $("op-prix-libelle").textContent = type === "dividende" ? "Dividende par action (€)" : "Prix unitaire (€)";
+    $("op-frais-libelle").textContent = type === "dividende" ? "Prélèvements (€)" : "Frais (€)";
+    const existante = Journal.trouverLigne(etat.pf, $("op-code").value.trim().toUpperCase(), $("op-nom").value);
+    $("op-nouvelle-ligne").hidden = type !== "achat" || !!existante;
+  }
+
+  function ouvrirOperation() {
+    $("f-operation").reset();
+    $("op-date").value = Journal.aujourdhui();
+    $("op-place").value = Donnees.PLACE_DEFAUT;
+    $("op-societes").replaceChildren(...etat.pf.lignes.map((l) => el("option", { value: l.nom })));
+    $("f-operation").querySelectorAll(".invalide").forEach((c) => c.classList.remove("invalide"));
+    etat.apercuOperation = null;
+    etapeOperation(false); ajusterOperation();
+    $("dlg-operation").showModal();
+  }
+  $("nouvelle-operation").addEventListener("click", ouvrirOperation);
+
+  // Choisir une société du portefeuille remplit son code, et inversement.
+  $("op-nom").addEventListener("input", () => {
+    const l = Journal.trouverLigne(etat.pf, "", $("op-nom").value);
+    if (l && !$("op-code").value) $("op-code").value = l.code;
+    ajusterOperation();
+  });
+  $("op-code").addEventListener("change", () => {
+    const l = Journal.trouverLigne(etat.pf, $("op-code").value.trim().toUpperCase(), "");
+    if (l && !$("op-nom").value) $("op-nom").value = l.nom;
+    ajusterOperation();
+  });
+  document.querySelectorAll('input[name="op-type"]').forEach((r) => r.addEventListener("change", ajusterOperation));
+
+  function texteLigne(a) {
+    const L = a.ligne, nom = a.op.nom || a.op.code;
+    const pru = (v) => (estNombre(v) ? fEur.format(v) : "inconnu");
+    if (L.action === "creer") return `Ajouter la ligne « ${nom} » au portefeuille : ${pluriel(L.apres.quantite, "titre")}, prix de revient ${pru(L.apres.prixRevient)}.`;
+    if (L.action === "solder") return `Retirer la ligne ${nom} du portefeuille : tous les titres sont vendus.`;
+    if (a.op.type === "achat") return `Mettre à jour la ligne ${nom} : ${fQte.format(L.avant.quantite)} → ${pluriel(L.apres.quantite, "titre")}, prix de revient ${pru(L.avant.prixRevient)} → ${pru(L.apres.prixRevient)}.`;
+    return `Mettre à jour la ligne ${nom} : ${fQte.format(L.avant.quantite)} → ${pluriel(L.apres.quantite, "titre")} (prix de revient inchangé : ${pru(L.apres.prixRevient)}).`;
+  }
+
+  function texteRecap(a) {
+    const o = a.op, nom = o.nom || o.code, frais = o.frais ? `, ${o.type === "dividende" ? "prélèvements" : "frais"} ${fEur.format(o.frais)}` : "";
+    if (o.type === "achat") return `Achat de ${pluriel(o.quantite, "titre")} ${nom} à ${fEur.format(o.prix)}${frais} : ${fEur.format(o.total)} décaissés.`;
+    if (o.type === "vente") return `Vente de ${pluriel(o.quantite, "titre")} ${nom} à ${fEur.format(o.prix)}${frais} : ${fEur.format(o.total)} encaissés.` +
+      (estNombre(a.plusValue) ? ` Plus-value réalisée : ${a.plusValue > 0 ? "+" : ""}${fEur.format(a.plusValue)}.` : "");
+    return `Dividende de ${fEur.format(o.prix)} par action sur ${pluriel(o.quantite, "titre")} ${nom}${frais} : ${fEur.format(o.total)} encaissés.`;
+  }
+
+  $("f-operation").addEventListener("submit", (e) => {
+    e.preventDefault();
+    // Étape 2 : l'utilisateur a choisi ce qui doit être mis à jour.
+    if (etat.apercuOperation) {
+      const a = etat.apercuOperation;
+      try {
+        Journal.appliquer(etat.pf, a, {
+          majLigne: !$("op-case-ligne").hidden && $("op-maj-ligne").checked,
+          majCash: $("op-maj-cash").checked,
+        });
+      } catch (err) { return message("op-message", err.message); }
+      etat.apercuOperation = null;
+      $("dlg-operation").close();
+      enregistrer(); toutAfficher();
+      afficherBandeaux(`Opération enregistrée : ${LIBELLES_TYPE[a.op.type].toLowerCase()} ${a.op.nom || a.op.code}.`, true);
+      return;
+    }
+    // Étape 1 : lecture et vérification de la saisie, puis aperçu des mises à jour proposées.
+    const nombres = {}; let invalide = false;
+    for (const c of ["quantite", "prix", "frais"]) { const v = lireChamp($("op-" + c)); if (Number.isNaN(v)) invalide = true; nombres[c] = v; }
+    if (invalide) return message("op-message", "Corrigez les nombres signalés en rouge.");
+    const a = Journal.preparer(etat.pf, Object.assign(nombres, {
+      type: typeOperation(), date: $("op-date").value, nom: $("op-nom").value, code: $("op-code").value,
+      place: $("op-place").value, enveloppe: $("op-enveloppe").value, note: $("op-note").value,
+    }));
+    if (a.erreurs.length) return message("op-message", a.erreurs.join(" "));
+    etat.apercuOperation = a;
+    $("op-recap").textContent = texteRecap(a);
+    $("op-avertissements").replaceChildren(...a.avertissements.map((t) => el("li", { texte: t })));
+    $("op-case-ligne").hidden = !a.ligne.action;
+    $("op-maj-ligne").checked = true;
+    if (a.ligne.action) $("op-texte-ligne").textContent = texteLigne(a);
+    $("op-maj-cash").checked = true;
+    $("op-texte-cash").textContent = `Ajuster le cash disponible : ${fEur.format(a.cash.avant)} → ${fEur.format(a.cash.apres)}.`;
+    etapeOperation(true);
+  });
+  $("op-retour").addEventListener("click", () => { etat.apercuOperation = null; etapeOperation(false); });
+  $("op-annuler").addEventListener("click", () => { $("dlg-operation").close(); });
+  $("dlg-operation").addEventListener("close", () => { etat.apercuOperation = null; });
 
   // ================= Calculatrice d'analyse =================
   const CHAMPS = [
@@ -583,6 +840,9 @@
 
   // ================= Démarrage =================
   construireFormulaire();
+  for (const id of ["l-place", "op-place"]) {
+    $(id).replaceChildren(...Object.entries(Donnees.PLACES).map(([cle, nom]) => el("option", { value: cle, texte: nom })));
+  }
   $("formulaire").addEventListener("input", calculer);
   $("formulaire").addEventListener("submit", (e) => e.preventDefault());
   $("reinitialiser").addEventListener("click", () => remplir(D.ALPHA_INDUSTRIE));

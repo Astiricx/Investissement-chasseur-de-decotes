@@ -6,6 +6,8 @@
   const Donnees = sousNode ? require("./donnees.js") : racine.DecotesDonnees;
   const Coffre = sousNode ? require("./coffre.js") : racine.DecotesCoffre;
   const CSV = sousNode ? require("./csv.js") : racine.DecotesCSV;
+  const Reseau = sousNode ? require("./reseau.js") : racine.DecotesReseau;
+  const Journal = sousNode ? require("./journal.js") : racine.DecotesJournal;
   const resultats = [];
   const arrondi = (v, d) => Math.round(v * 10 ** d) / 10 ** d;
   function verifier(nom, obtenu, attendu) {
@@ -105,7 +107,67 @@
   let refus = false; try { Donnees.normaliser({ version: 99 }); } catch (e) { refus = true; }
   verifier("Données : version future refusée", refus, true);
 
-  // 7. Coffre chiffré (itérations réduites pour que le test reste instantané).
+
+  // 7. Journal : achats, ventes, dividendes.
+  const pfJ = () => Donnees.normaliser({ version: 1, parametres: { capitalDepart: 10000, cash: 5000 }, lignes: [
+    { nom: "Alpha Industrie", code: "ALPH", quantite: 100, prixRevient: 3.5, cours: 3.8, objectif: 7.5 },
+    { nom: "Bêta Textile", code: "BETA", quantite: 40, prixRevient: null, cours: 15 },
+  ] });
+  let pj = pfJ();
+  let ap = Journal.preparer(pj, { type: "achat", date: "2027-01-10", code: "alph", quantite: 50, prix: 3, frais: 1.5 }, new Date(2027, 0, 12));
+  verifier("Journal : achat sans erreur", ap.erreurs.length, 0);
+  verifier("Journal : achat, total décaissé = 151,50 €", ap.op.total, 151.5);
+  verifier("Journal : achat, quantité 100 → 150", ap.ligne.apres.quantite, 150);
+  verifier("Journal : achat, PRU pondéré frais inclus = 3,3433 €", ap.ligne.apres.prixRevient, 3.3433);
+  verifier("Journal : achat, cash 5 000 → 4 848,50 €", ap.cash.apres, 4848.5);
+  verifier("Journal : achat, nom repris de la ligne", ap.op.nom, "Alpha Industrie");
+  Journal.appliquer(pj, ap, { majLigne: true, majCash: true });
+  verifier("Journal : achat appliqué à la ligne et au cash", JSON.stringify([pj.lignes[0].quantite, pj.lignes[0].prixRevient, pj.parametres.cash, pj.journal.length]), JSON.stringify([150, 3.3433, 4848.5, 1]));
+  pj = pfJ();
+  ap = Journal.preparer(pj, { type: "achat", date: "2027-01-10", nom: "Alpha Industrie", quantite: 10, prix: 3, frais: 0 }, new Date(2027, 0, 12));
+  Journal.appliquer(pj, ap, { majLigne: false, majCash: false });
+  verifier("Journal : refus de mise à jour respecté", JSON.stringify([pj.lignes[0].quantite, pj.parametres.cash, pj.journal.length]), JSON.stringify([100, 5000, 1]));
+  pj = pfJ();
+  ap = Journal.preparer(pj, { type: "achat", date: "2027-01-10", nom: "Zeta Fonderie", code: "ZETA", place: "Oslo", enveloppe: "CTO", quantite: 20, prix: 10, frais: 2 }, new Date(2027, 0, 12));
+  verifier("Journal : achat d'une nouvelle société → création", ap.ligne.action, "creer");
+  Journal.appliquer(pj, ap, { majLigne: true, majCash: true });
+  const zeta = pj.lignes[2];
+  verifier("Journal : nouvelle ligne créée (PRU 10,10 €, Oslo, CTO)", JSON.stringify([zeta.nom, zeta.quantite, zeta.prixRevient, zeta.place, zeta.enveloppe, zeta.cours]), JSON.stringify(["Zeta Fonderie", 20, 10.1, "XOSL", "CTO", 10]));
+  pj = pfJ();
+  ap = Journal.preparer(pj, { type: "vente", date: "2027-01-10", code: "ALPH", quantite: 40, prix: 7, frais: 2 }, new Date(2027, 0, 12));
+  verifier("Journal : vente partielle, 100 → 60 titres, PRU inchangé", JSON.stringify([ap.ligne.action, ap.ligne.apres.quantite, ap.ligne.apres.prixRevient]), JSON.stringify(["modifier", 60, 3.5]));
+  verifier("Journal : vente, total encaissé = 278 €", ap.op.total, 278);
+  verifier("Journal : vente, plus-value réalisée = 138 €", ap.plusValue, 138);
+  ap = Journal.preparer(pj, { type: "vente", date: "2027-01-10", code: "ALPH", quantite: 100, prix: 7, frais: 0 }, new Date(2027, 0, 12));
+  Journal.appliquer(pj, ap, { majLigne: true, majCash: true });
+  verifier("Journal : vente totale → ligne retirée", pj.lignes.some((l) => l.code === "ALPH"), false);
+  verifier("Journal : plus-value conservée dans le journal", pj.journal[0].plusValue, 350);
+  ap = Journal.preparer(pfJ(), { type: "vente", date: "2027-01-10", code: "ALPH", quantite: 150, prix: 7 }, new Date(2027, 0, 12));
+  verifier("Journal : vente supérieure à la quantité détenue bloquée", JSON.stringify([ap.ligne.action, ap.ligne.probleme !== null]), JSON.stringify([null, true]));
+  ap = Journal.preparer(pfJ(), { type: "vente", date: "2027-01-10", code: "BETA", quantite: 10, prix: 16 }, new Date(2027, 0, 12));
+  verifier("Journal : vente sans PRU connu → pas de plus-value", ap.plusValue, null);
+  ap = Journal.preparer(pfJ(), { type: "dividende", date: "2027-01-10", code: "ALPH", quantite: 100, prix: 0.2, frais: 6 }, new Date(2027, 0, 12));
+  verifier("Journal : dividende, 20 € − 6 € de prélèvements = 14 €, ligne inchangée", JSON.stringify([ap.op.total, ap.cash.apres, ap.ligne.action]), JSON.stringify([14, 5014, null]));
+  ap = Journal.preparer(pfJ(), { type: "achat", date: "", nom: "", quantite: 0, prix: 0 }, new Date(2027, 0, 12));
+  verifier("Journal : saisie incomplète refusée (4 erreurs)", ap.erreurs.length, 4);
+  ap = Journal.preparer(pfJ(), { type: "achat", date: "2027-01-10", code: "ALPH", quantite: 2000, prix: 3 }, new Date(2027, 0, 12));
+  verifier("Journal : cash négatif signalé", ap.avertissements.some((a) => a.includes("négatif")), true);
+  ap = Journal.preparer(pfJ(), { type: "achat", date: "2027-02-10", code: "ALPH", quantite: 1, prix: 3 }, new Date(2027, 0, 12));
+  verifier("Journal : date future signalée", ap.avertissements.some((a) => a.includes("futur")), true);
+  const sj = Journal.synthese([{ type: "achat", date: "2027-01-02", total: 100, frais: 1 }, { type: "vente", date: "2027-03-01", total: 80, plusValue: 12, frais: 1 }, { type: "dividende", date: "2027-02-01", total: 5, frais: 0 }]);
+  verifier("Journal : tri du plus récent au plus ancien", sj.operations.map((o) => o.date).join(","), "2027-03-01,2027-02-01,2027-01-02");
+  verifier("Journal : à date égale, dernière saisie d'abord", Journal.synthese([{ type: "achat", date: "2027-01-02", nom: "A" }, { type: "vente", date: "2027-01-02", nom: "B" }]).operations[0].nom, "B");
+  verifier("Journal : totaux", JSON.stringify(sj.totaux), JSON.stringify({ achat: 100, vente: 80, dividende: 5, plusValues: 12, frais: 2 }));
+
+  // 8. Places de cotation et ancien format.
+  verifier("Place : « Euronext Paris » → XPAR", Donnees.placeDepuisTexte("Euronext Paris"), "XPAR");
+  verifier("Place : « Oslo Børs » → XOSL", Donnees.placeDepuisTexte("Oslo Børs"), "XOSL");
+  verifier("Place : inconnue → Paris par défaut", Donnees.normaliserLigne({ nom: "X", place: "Mars" }).place, "XPAR");
+  verifier("Code : caractères dangereux retirés", Donnees.normaliserLigne({ nom: "X", code: "ab/../c?d=1" }).code, "AB..CD1");
+  verifier("Ancienne sauvegarde sans relais ni place lisible", JSON.stringify([Donnees.normaliser({ version: 1, lignes: [{ nom: "X" }] }).parametres.relais, Donnees.normaliser({ version: 1, lignes: [{ nom: "X" }] }).lignes[0].place]), JSON.stringify(["", "XPAR"]));
+  verifier("CSV : colonne « Place de cotation » lue", Donnees.normaliserLigne(CSV.lirePortefeuille("Société;Code;Place de cotation;Quantité\nAlpha;ALPH;Oslo;10").lignes[0]).place, "XOSL");
+
+  // 9. Coffre chiffré (itérations réduites pour que le test reste instantané).
   async function testsCoffre() {
     if (!Coffre.disponible) { verifier("Coffre : chiffrement disponible dans ce navigateur", false, true); return; }
     const { session, enveloppe } = await Coffre.creer("mot de passe d'essai", pf, { iterations: 1000 });
@@ -126,7 +188,70 @@
     verifier("Coffre : 600 000 itérations par défaut", Coffre.ITERATIONS, 600000);
   }
 
-  const pret = testsCoffre().catch((e) => verifier("Coffre : exécution sans erreur (" + e.message + ")", false, true)).then(() => {
+
+  // 10. Actualisation des cours avec des réponses simulées (aucune requête réelle).
+  async function testsReseau() {
+    const reponse = (status, corps) => Promise.resolve({ ok: status >= 200 && status < 300, status, json: () => (corps instanceof Error ? Promise.reject(corps) : Promise.resolve(corps)) });
+    const chart = (prix, devise, nom) => ({ chart: { result: [{ meta: { regularMarketPrice: prix, currency: devise, regularMarketTime: 1799229600, exchangeTimezoneName: "Europe/Paris", longName: nom } }], error: null } });
+    const demandes = [];
+    const fauxFetch = (url, init) => {
+      demandes.push(url);
+      const m = decodeURIComponent(url).match(/chart\/([^?]+)/); const s = m && m[1];
+      if (init.credentials !== "omit") return Promise.reject(new Error("cookies envoyés"));
+      if (s === "ALPH.PA") return reponse(200, chart(3.9, "EUR", "Alpha Industrie SA"));
+      if (s === "EQNR.OL") return reponse(200, chart(300, "NOK", "Equinor ASA"));
+      if (s === "NOKEUR=X") return reponse(200, chart(0.085, "EUR", "NOK/EUR"));
+      if (s === "VOD.L") return reponse(200, chart(70, "GBp", "Vodafone"));
+      if (s === "GBPEUR=X") return reponse(200, chart(1.17, "EUR", "GBP/EUR"));
+      if (s === "ZZZZ.PA") return reponse(404, { chart: { result: null, error: { code: "Not Found", description: "No data found, symbol may be delisted" } } });
+      if (s === "BAD.PA") return reponse(200, { chart: { result: [{ meta: { currency: "EUR" } }], error: null } });
+      if (s === "SAUT.PA") return reponse(200, chart(9, "EUR", "Saut SA"));
+      if (s === "LENT.PA") return new Promise((_, rejeter) => init.signal.addEventListener("abort", () => rejeter(Object.assign(new Error("abandon"), { name: "AbortError" }))));
+      return Promise.reject(new TypeError("Failed to fetch"));
+    };
+    const lignes = [
+      { id: "1", nom: "Alpha", code: "ALPH", place: "XPAR", cours: 3.8 },
+      { id: "2", nom: "Alpha (CTO)", code: "ALPH.PA", place: "XPAR", cours: 3.8 },
+      { id: "3", nom: "Equinor", code: "EQNR", place: "XOSL", cours: 25 },
+      { id: "4", nom: "Vodafone", code: "VOD", place: "XLON", cours: 80 },
+      { id: "5", nom: "Inconnue", code: "ZZZZ", place: "XPAR", cours: 1 },
+      { id: "6", nom: "Sans code", code: "", place: "XPAR", cours: 1 },
+      { id: "7", nom: "Mauvaise réponse", code: "BAD", place: "XPAR", cours: 1 },
+      { id: "8", nom: "Lente", code: "LENT", place: "XPAR", cours: 1 },
+      { id: "9", nom: "Saut", code: "SAUT", place: "XPAR", cours: 5 },
+    ];
+    const r = await Reseau.actualiser(lignes, { fetch: fauxFetch, pause: 0, delai: 50 });
+    const par = Object.fromEntries(r.resultats.map((x) => [x.id, x]));
+    verifier("Réseau : cours en euros mis à jour", par["1"].prix, 3.9);
+    verifier("Réseau : date du cours dans le fuseau de la place", par["1"].date, "2027-01-06");
+    verifier("Réseau : nom renvoyé par le fournisseur", par["1"].nomFournisseur, "Alpha Industrie SA");
+    verifier("Réseau : même symbole demandé une seule fois", demandes.filter((u) => u.includes("ALPH.PA")).length, 1);
+    verifier("Réseau : code complet ALPH.PA accepté", par["2"].prix, 3.9);
+    verifier("Réseau : Oslo converti de NOK en euros (300 × 0,085 = 25,50 €)", par["3"].prix, 25.5);
+    verifier("Réseau : Londres en pence converti (70 p → 0,70 £ → 0,819 €)", par["4"].prix, 0.819);
+    verifier("Réseau : code inconnu signalé, ancien cours conservé", JSON.stringify([par["5"].ok, /introuvable/.test(par["5"].erreur), par["5"].ancien]), JSON.stringify([false, true, 1]));
+    verifier("Réseau : ligne sans code ignorée sans requête", JSON.stringify([par["6"].ok, r.ignorees]), JSON.stringify([false, 1]));
+    verifier("Réseau : réponse sans cours refusée", /inexploitable/.test(par["7"].erreur), true);
+    verifier("Réseau : délai dépassé signalé", /Pas de réponse/.test(par["8"].erreur), true);
+    verifier("Réseau : variation de +80 % signalée", JSON.stringify([par["9"].ok, par["9"].alerte]), JSON.stringify([true, true]));
+    verifier("Réseau : compte rendu (5 à jour, 3 échecs, 1 ignorée)", JSON.stringify([r.misAJour, r.echecs, r.ignorees, r.diagnostic]), JSON.stringify([5, 3, 1, null]));
+    verifier("Réseau : les lignes elles-mêmes ne sont pas modifiées", lignes[0].cours, 3.8);
+    verifier("Réseau : aucune quantité ni aucun nom dans les adresses", demandes.some((u) => /Alpha|Equinor|quantite/.test(decodeURIComponent(u))), false);
+
+    // Le navigateur bloque tout (CORS) : on s'arrête vite avec un diagnostic.
+    demandes.length = 0;
+    const bloque = await Reseau.actualiser(lignes.slice(2, 5).map((l, i) => Object.assign({}, l, { code: "X" + i })), { fetch: fauxFetch, pause: 0 });
+    verifier("Réseau : accès refusé partout → diagnostic « reseau » et arrêt", JSON.stringify([bloque.diagnostic, bloque.misAJour, demandes.length]), JSON.stringify(["reseau", 0, 4]));
+    // Relais : l'adresse Yahoo est encodée dans celle du relais.
+    demandes.length = 0;
+    await Reseau.actualiser([lignes[0]], { fetch: fauxFetch, pause: 0, relais: "corsproxy" });
+    verifier("Réseau : relais corsproxy.io utilisé si activé", demandes[0].startsWith("https://corsproxy.io/?https%3A%2F%2Fquery1.finance.yahoo.com"), true);
+    // Limitation du nombre de requêtes : arrêt immédiat.
+    const limite = await Reseau.actualiser(lignes.slice(0, 3), { fetch: () => reponse(429, {}), pause: 0 });
+    verifier("Réseau : limite de requêtes → arrêt et diagnostic", JSON.stringify([limite.diagnostic, limite.misAJour]), JSON.stringify(["limite", 0]));
+  }
+
+  const pret = testsCoffre().then(testsReseau).catch((e) => verifier("Coffre : exécution sans erreur (" + e.message + ")", false, true)).then(() => {
     const reussis = resultats.filter((r) => r.ok).length;
     const bilan = { resultats, reussis, total: resultats.length, ok: reussis === resultats.length };
     console.log(`Tests de la logique : ${reussis}/${resultats.length} réussis`);

@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- Sécurité : la page ne charge que ses propres fichiers et ne contacte aucun autre site. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<!-- Sécurité : la page ne charge que ses propres fichiers. Les seules connexions autorisées sont
+     celles du module des cours (js/reseau.js) : Yahoo Finance et, s'il est activé, le relais corsproxy.io. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://query1.finance.yahoo.com https://query2.finance.yahoo.com https://corsproxy.io; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
 <title>Chasseur de décotes</title>
@@ -24,6 +25,7 @@
     <nav class="onglets" id="onglets" aria-label="Sections" hidden>
       <button type="button" class="onglet" data-vue="tableau" aria-current="page">Tableau</button>
       <button type="button" class="onglet" data-vue="analyse">Analyse</button>
+      <button type="button" class="onglet" data-vue="journal">Journal</button>
       <button type="button" class="onglet" data-vue="donnees">Données</button>
     </nav>
   </div>
@@ -72,11 +74,25 @@
   <section id="vue-tableau" class="vue">
     <p class="bandeau" id="bandeau" hidden></p>
     <div class="indicateurs" id="indicateurs"></div>
+    <div class="bloc rapport" id="rapport-cours" hidden>
+      <div class="bloc-titre">
+        <h2>Actualisation des cours</h2>
+        <button type="button" class="lien" id="rapport-fermer">Fermer</button>
+      </div>
+      <p id="rapport-resume" aria-live="polite"></p>
+      <ul class="rapport-liste" id="rapport-liste"></ul>
+    </div>
     <div class="bloc">
       <div class="bloc-titre">
-        <h2>Portefeuille</h2>
-        <p class="note" id="resume-lignes"></p>
-        <button type="button" class="bouton" id="ajouter-ligne">Ajouter une ligne</button>
+        <div>
+          <h2>Portefeuille</h2>
+          <p class="note" id="resume-lignes"></p>
+          <p class="note" id="etat-cours"></p>
+        </div>
+        <div class="actions">
+          <button type="button" class="bouton principal" id="actualiser">Actualiser les cours</button>
+          <button type="button" class="bouton" id="ajouter-ligne">Ajouter une ligne</button>
+        </div>
       </div>
       <p class="note" id="aucune-ligne" hidden>Aucune ligne pour l'instant. Ajoutez votre première action, ou importez vos lignes depuis l'onglet Données.</p>
       <div class="tableau-cadre">
@@ -126,6 +142,40 @@
     </div>
   </section>
 
+  <!-- ============ Journal ============ -->
+  <section id="vue-journal" class="vue" hidden>
+    <p class="bandeau" id="bandeau-journal" hidden></p>
+    <div class="indicateurs" id="journal-totaux"></div>
+    <div class="bloc">
+      <div class="bloc-titre">
+        <div>
+          <h2>Journal des opérations</h2>
+          <p class="note" id="journal-resume"></p>
+        </div>
+        <button type="button" class="bouton principal" id="nouvelle-operation">Nouvelle opération</button>
+      </div>
+      <p class="note" id="journal-vide" hidden>Aucune opération pour l'instant. Saisissez votre premier achat : le portefeuille et le cash peuvent être mis à jour en même temps.</p>
+      <div class="tableau-cadre">
+        <table class="lignes operations" id="operations">
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">Type</th>
+              <th scope="col">Société</th>
+              <th scope="col" class="num">Quantité</th>
+              <th scope="col" class="num">Prix unitaire</th>
+              <th scope="col" class="num">Frais</th>
+              <th scope="col" class="num">Total</th>
+              <th scope="col" class="num">Plus-value</th>
+              <th scope="col"><span class="invisible">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ Données ============ -->
   <section id="vue-donnees" class="vue" hidden>
     <p class="bandeau" id="bandeau-donnees" hidden></p>
@@ -136,6 +186,19 @@
           <div class="champ"><label for="p-capital">Capital de départ (€)</label><input id="p-capital" type="text" inputmode="decimal"></div>
           <div class="champ"><label for="p-cash">Cash disponible (€)</label><input id="p-cash" type="text" inputmode="decimal"></div>
           <p class="note" id="parametres-etat" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <div class="bloc">
+        <h2>Cours de bourse</h2>
+        <p class="note">Source : Yahoo Finance (cours de clôture ou légèrement différé). Seuls les codes bourse sont envoyés, jamais vos quantités ni vos montants.</p>
+        <form id="f-relais" class="pile" novalidate>
+          <div class="champ large"><label for="p-relais">Mode de connexion</label>
+            <select id="p-relais">
+              <option value="">Directe (recommandée)</option>
+              <option value="corsproxy">Par le relais corsproxy.io</option>
+            </select></div>
+          <p class="avertissement" id="relais-avertissement" hidden>Le relais corsproxy.io reçoit et peut enregistrer la liste de vos codes bourse. Selon sa documentation, son usage gratuit est réservé au développement : un site en ligne peut demander un compte payant. À n'activer que si la connexion directe échoue.</p>
         </form>
       </div>
 
@@ -180,8 +243,10 @@
     <h2 id="ligne-titre"></h2>
     <div class="champ large"><label for="l-nom">Société</label><input id="l-nom" type="text" maxlength="120"></div>
     <div class="deux">
-      <div class="champ large"><label for="l-code">Code bourse</label><input id="l-code" type="text" maxlength="24"></div>
+      <div class="champ large"><label for="l-code">Code bourse</label><input id="l-code" type="text" maxlength="24" autocapitalize="characters" spellcheck="false"></div>
+      <div class="champ large"><label for="l-place">Place de cotation</label><select id="l-place"></select></div>
       <div class="champ large"><label for="l-enveloppe">Enveloppe</label><select id="l-enveloppe"><option>PEA</option><option>CTO</option></select></div>
+      <div class="champ large"><label for="l-dateCours">Date du cours</label><input id="l-dateCours" type="date"></div>
       <div class="champ large"><label for="l-quantite">Nombre d'actions</label><input id="l-quantite" type="text" inputmode="decimal"></div>
       <div class="champ large"><label for="l-prixRevient">Prix de revient (€)</label><input id="l-prixRevient" type="text" inputmode="decimal"></div>
       <div class="champ large"><label for="l-cours">Cours actuel (€)</label><input id="l-cours" type="text" inputmode="decimal"></div>
@@ -189,6 +254,7 @@
       <div class="champ large"><label for="l-solvabilite">Solvabilité maison (%)</label><input id="l-solvabilite" type="text" inputmode="decimal"></div>
       <div class="champ large"><label for="l-bilanSolide">Bilan toujours solide ?</label><select id="l-bilanSolide"><option value="">Non renseigné</option><option value="oui">Oui</option><option value="non">Non</option></select></div>
     </div>
+    <p class="note aide-code">Code bourse : le code court (ALPH) avec sa place de cotation, ou le code Yahoo complet (ALPH.PA).</p>
     <div class="champ large"><label for="l-dateResultats">Prochaine publication de résultats</label><input id="l-dateResultats" type="date"></div>
     <div class="champ large"><label for="l-notes">Thèse et notes</label><textarea id="l-notes" rows="3" maxlength="2000"></textarea></div>
     <p class="message" id="ligne-message" role="alert" hidden></p>
@@ -196,6 +262,49 @@
       <button type="submit" class="bouton principal">Enregistrer</button>
       <button type="button" class="bouton" id="ligne-annuler">Annuler</button>
       <button type="button" class="bouton danger" id="ligne-supprimer">Supprimer</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ============ Saisie d'une opération ============ -->
+<dialog id="dlg-operation" class="dialogue">
+  <form id="f-operation" autocomplete="off" novalidate>
+    <h2>Nouvelle opération</h2>
+    <div id="op-saisie">
+      <fieldset class="types">
+        <legend class="invisible">Type d'opération</legend>
+        <label><input type="radio" name="op-type" value="achat" checked><span>Achat</span></label>
+        <label><input type="radio" name="op-type" value="vente"><span>Vente</span></label>
+        <label><input type="radio" name="op-type" value="dividende"><span>Dividende</span></label>
+      </fieldset>
+      <div class="champ large"><label for="op-nom">Société</label><input id="op-nom" type="text" maxlength="120" list="op-societes"></div>
+      <datalist id="op-societes"></datalist>
+      <div class="deux">
+        <div class="champ large"><label for="op-date">Date</label><input id="op-date" type="date"></div>
+        <div class="champ large"><label for="op-code">Code bourse</label><input id="op-code" type="text" maxlength="24" autocapitalize="characters" spellcheck="false"></div>
+        <div class="champ large"><label for="op-quantite">Nombre de titres</label><input id="op-quantite" type="text" inputmode="decimal"></div>
+        <div class="champ large"><label for="op-prix" id="op-prix-libelle">Prix unitaire (€)</label><input id="op-prix" type="text" inputmode="decimal"></div>
+        <div class="champ large"><label for="op-frais" id="op-frais-libelle">Frais (€)</label><input id="op-frais" type="text" inputmode="decimal"></div>
+      </div>
+      <div class="deux" id="op-nouvelle-ligne">
+        <div class="champ large"><label for="op-place">Place de cotation</label><select id="op-place"></select></div>
+        <div class="champ large"><label for="op-enveloppe">Enveloppe</label><select id="op-enveloppe"><option>PEA</option><option>CTO</option></select></div>
+      </div>
+      <div class="champ large"><label for="op-note">Note</label><input id="op-note" type="text" maxlength="500"></div>
+    </div>
+
+    <div id="op-confirmation" hidden>
+      <p class="recap" id="op-recap"></p>
+      <ul class="liste-fine avertissements" id="op-avertissements"></ul>
+      <label class="case" id="op-case-ligne"><input type="checkbox" id="op-maj-ligne" checked><span id="op-texte-ligne"></span></label>
+      <label class="case" id="op-case-cash"><input type="checkbox" id="op-maj-cash" checked><span id="op-texte-cash"></span></label>
+    </div>
+
+    <p class="message" id="op-message" role="alert" hidden></p>
+    <div class="actions">
+      <button type="submit" class="bouton principal" id="op-valider">Continuer</button>
+      <button type="button" class="bouton" id="op-retour" hidden>Modifier la saisie</button>
+      <button type="button" class="bouton" id="op-annuler">Annuler</button>
     </div>
   </form>
 </dialog>
@@ -209,6 +318,8 @@
 <script src="js/donnees.js"></script>
 <script src="js/coffre.js"></script>
 <script src="js/csv.js"></script>
+<script src="js/reseau.js"></script>
+<script src="js/journal.js"></script>
 <script src="js/tests.js"></script>
 <script src="js/app.js"></script>
 </body>
