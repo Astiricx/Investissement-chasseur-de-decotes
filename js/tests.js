@@ -9,6 +9,7 @@
   const Reseau = sousNode ? require("./reseau.js") : racine.DecotesReseau;
   const Journal = sousNode ? require("./journal.js") : racine.DecotesJournal;
   const M = sousNode ? require("./methodes.js") : racine.DecotesMethodes;
+  const Gerants = sousNode ? require("./gerants.js") : racine.DecotesGerants;
   const resultats = [];
   const arrondi = (v, d) => Math.round(v * 10 ** d) / 10 ** d;
   function verifier(nom, obtenu, attendu) {
@@ -237,6 +238,76 @@
   const pj20 = M.projection(10000, 0.07, 20, 250);
   verifier("Projection : + 250 €/mois à 7 % sur 20 ans = 165 580,94 €", JSON.stringify([arrondi(pj20[20].valeur, 2), pj20[20].verse, pj20.length]), JSON.stringify([165580.94, 70000, 21]));
 
+
+  // 16. Qualité « action idéale » : Apple, exercice 2025 (10-K).
+  const qa = M.qualite(M.EXEMPLE_APPLE);
+  const crit = (cle) => qa.criteres.find((c) => c.cle === cle);
+  verifier("Apple : marge brute 46,9 % (> 40 %)", JSON.stringify([arrondi(crit("margeBrute").valeur, 3), crit("margeBrute").respecte]), JSON.stringify([0.469, true]));
+  verifier("Apple : marge nette 26,9 % (> 10 %)", JSON.stringify([arrondi(crit("margeNette").valeur, 3), crit("margeNette").respecte]), JSON.stringify([0.269, true]));
+  verifier("Apple : croissance du résultat net 4,3 %/an sur 4 ans (< 15 %)", JSON.stringify([arrondi(crit("croissance").valeur, 3), crit("croissance").respecte]), JSON.stringify([0.043, false]));
+  verifier("Apple : dette LT = 0,7 année de bénéfice (< 4)", JSON.stringify([arrondi(crit("detteLT").valeur, 2), crit("detteLT").respecte]), JSON.stringify([0.7, true]));
+  verifier("Apple : dettes ÷ capitaux propres 3,87 (> 0,8)", JSON.stringify([arrondi(crit("dettesCP").valeur, 2), crit("dettesCP").respecte]), JSON.stringify([3.87, false]));
+  verifier("Apple : R&D 17,7 % du brut (> 5 %), capex 10,9 % du BN (< 25 %)", JSON.stringify([arrondi(crit("rd").valeur, 3), crit("rd").respecte, arrondi(crit("capex").valeur, 3), crit("capex").respecte]), JSON.stringify([0.177, false, 0.109, true]));
+  verifier("Apple : intérêts non publiés → non évalué ; 5 critères sur 8", JSON.stringify([crit("interets").respecte, qa.respectes, qa.evalues]), JSON.stringify([null, 5, 8]));
+  verifier("Qualité : score plafonné à 2, seuil = 1", JSON.stringify([crit("margeNette").score, arrondi(M.qualite({ chiffreAffaires: 100, resultatBrut: 40 }).criteres[2].score, 6)]), JSON.stringify([2, 1]));
+
+  // 17. Assurance anti-krach.
+  verifier("Put Black-Scholes : S 100, K 65, 1 an, vol 30 %, taux 3 % = 0,638", arrondi(M.prixPut(100, 65, 1, 0.30, 0.03), 3), 0.638);
+  verifier("Put à la monnaie : S = K = 100, vol 20 %, taux 0 = 7,966", arrondi(M.prixPut(100, 100, 1, 0.2, 0), 3), 7.966);
+  const as = M.assurance({ valeur: 10000, budget: 0.02, distance: 0.35, volatilite: 0.30, taux: 0.03, rendementMarche: 0.08, rendementCash: 0.02, krach: 0.4, anneeKrach: 5 });
+  verifier("Assurance : 2 % de budget couvrent 3,1 fois le portefeuille", arrondi(as.couverture, 2), 3.14);
+  const sc = (v) => as.scenarios.find((s) => s.variation === v);
+  verifier("Assurance : à −30 %, au-dessus du strike, les puts ne paient rien", sc(-0.3).gain, 0);
+  verifier("Assurance : à −50 %, puts × 23,5 la prime ; portefeuille 0,96 au lieu de 0,50", JSON.stringify([arrondi(sc(-0.5).multiple, 1), arrondi(sc(-0.5).avec, 2), sc(-0.5).sans]), JSON.stringify([23.5, 0.96, 0.5]));
+  verifier("Assurance : 10 ans sans krach, la prime coûte (17 640 € contre 21 589 € sans protection)", JSON.stringify([Math.round(as.sansKrach.assure), Math.round(as.sansKrach.sans)]), JSON.stringify([17640, 21589]));
+  verifier("Assurance : 10 ans avec un krach de −40 %, l'assuré finit devant le cash et le non-assuré", as.avecKrach.assure > as.avecKrach.cash && as.avecKrach.cash > as.avecKrach.sans, true);
+  verifier("Assurance : prime observée prioritaire sur l'estimation", M.assurance(Object.assign({}, { valeur: 1, budget: 0.02, distance: 0.3, volatilite: 0.3, taux: 0, primeObservee: 0.01, rendementMarche: 0, krach: 0.4 })).couverture, 2);
+
+  // 18. Carnet de bord et rotation.
+  verifier("Thèse : trois parties trop courtes signalées", Journal.verifierThese({ these: "pas cher", sortie: "", contre: "rien" }).length, 3);
+  const theseOK = { these: "Cotée à 57 % de sa VANE : immeubles achetés 9 M€, inscrits 4 M€ au bilan. Prix maximal 4,27 €.", sortie: "Vente à la VANT (7,50 €) ou si la solvabilité passe sous 40 %.", contre: "Les stocks pourraient être invendables ; la famille contrôle le capital." };
+  verifier("Thèse : complète acceptée", Journal.verifierThese(theseOK).length, 0);
+  const pc = Donnees.nouveauPortefeuille();
+  const apc = Journal.preparer(pc, { type: "achat", date: "2027-01-10", nom: "Alpha", code: "ALPH", quantite: 10, prix: 3.5, frais: 0 }, new Date(2027, 0, 12));
+  Journal.appliquer(pc, apc, { majLigne: true, majCash: true, carnet: theseOK });
+  verifier("Carnet : la thèse est enregistrée avec l'achat", JSON.stringify([pc.carnet.length, pc.carnet[0].type, pc.carnet[0].code, pc.carnet[0].date]), JSON.stringify([1, "achat", "ALPH", "2027-01-10"]));
+  verifier("Carnet : dernière thèse retrouvée par code", Journal.derniereThese(pc.carnet, "ALPH", "").these.slice(0, 9), "Cotée à 5");
+  const rot = Journal.rotation([
+    { type: "achat", date: "2026-03-01", total: 3000 }, { type: "vente", date: "2026-06-01", total: 2000 },
+    { type: "vente", date: "2025-06-01", total: 9000 }, { type: "dividende", date: "2026-06-01", total: 50 },
+  ], [{ date: "2026-02-01", titres: 9000, cash: 1000 }, { date: "2026-10-01", titres: 9000, cash: 1000 }], 10000, new Date(2026, 10, 13));
+  verifier("Rotation : min(achats 3 000, ventes 2 000) ÷ 10 000 = 20 % sur 12 mois", JSON.stringify([rot.achats, rot.ventes, rot.taux, rot.depasse]), JSON.stringify([3000, 2000, 0.2, false]));
+
+  // 19. Données : carnet, gérants, momentum.
+  const pd = Donnees.normaliser({ version: 1, carnet: [{ type: "achat", nom: "A", these: "x" }, { type: "autre", nom: "B" }],
+    gerants: [{ fonds: "F", societe: "S", mouvement: "Achat" }, { fonds: "F", societe: "", mouvement: "entree" }],
+    parametres: { momentum: { actif: true } }, lignes: [{ nom: "X", momentum: 0.12, dateMomentum: "2027-01-04" }] });
+  verifier("Données : entrées de carnet valides gardées", pd.carnet.length, 1);
+  verifier("Données : mouvement « Achat » lu comme une entrée ; incomplet écarté", JSON.stringify(pd.gerants.map((g) => g.mouvement)), JSON.stringify(["entree"]));
+  verifier("Données : momentum sans date d'acceptation refusé", pd.parametres.momentum.actif, false);
+  verifier("Données : momentum de la ligne conservé", pd.lignes[0].momentum, 0.12);
+
+  // 20. Smart Money.
+  const mv = [
+    { date: "2026-10-01", fonds: "Fonds A", societe: "SEB", code: "SK", mouvement: "entree", theme: "Consommation" },
+    { date: "2026-09-15", fonds: "Fonds B", societe: "Seb", code: "SK", mouvement: "renforcement", theme: "Consommation" },
+    { date: "2026-08-01", fonds: "Fonds A", societe: "Technip Energies", code: "TE", mouvement: "entree", theme: "Énergie" },
+    { date: "2026-07-01", fonds: "Fonds C", societe: "Technip Energies", code: "TE", mouvement: "sortie", theme: "Énergie" },
+    { date: "2025-01-01", fonds: "Fonds C", societe: "Vieille", code: "OLD", mouvement: "entree", theme: "Industrie" },
+  ].map(Donnees.normaliserMouvement);
+  const sg = Gerants.synthese(mv, 365, new Date(2026, 10, 13));
+  verifier("Smart Money : 12 mois → 4 mouvements, 3 fonds", JSON.stringify([sg.mouvements.length, sg.fonds.length]), JSON.stringify([4, 3]));
+  verifier("Smart Money : SEB achetée par 2 fonds = consensus, en tête", JSON.stringify([sg.societes[0].code, sg.societes[0].solde, sg.societes[0].consensus, sg.consensus]), JSON.stringify(["SK", 2, true, 1]));
+  verifier("Smart Money : Technip, 1 acheteur et 1 vendeur → solde 0", sg.societes.find((s) => s.code === "TE").solde, 0);
+  verifier("Smart Money : thèmes (Consommation +2, Énergie 0)", sg.themes.map((x) => `${x.theme}:${x.solde}`).join(","), "Consommation:2,Énergie:0");
+  const lc = Gerants.lireCSV("Date;Fonds;Gérant;Société;Code;Mouvement;Thème\n12/10/2026;Indépendance;W. Higgons;Seb;SK;Achat;Conso\n13/10/2026;X;;Y;;bof;\n");
+  verifier("Smart Money : CSV lu (1 mouvement, 1 ignoré)", JSON.stringify([lc.mouvements.length, lc.ignores.length, lc.mouvements[0].date, lc.mouvements[0].mouvement]), JSON.stringify([1, 1, "2026-10-12", "entree"]));
+  verifier("Smart Money : exemple Higgons, entrées SEB et ÉS signalées à vérifier", Gerants.EXEMPLE.filter((m) => /à vérifier/.test(m.source)).length, 2);
+
+  // 21. Momentum 12-1.
+  verifier("Momentum : clôture du mois dernier ÷ il y a 12 mois − 1", arrondi(Reseau.momentum([100, 102, 104, 106, 108, 110, 112, 114, 116, 118, 120, 125, 130]), 2), 0.25);
+  verifier("Momentum : historique trop court → inconnu", Reseau.momentum([100, 110]), null);
+
   // 9. Coffre chiffré (itérations réduites pour que le test reste instantané).
   async function testsCoffre() {
     if (!Coffre.disponible) { verifier("Coffre : chiffrement disponible dans ce navigateur", false, true); return; }
@@ -277,6 +348,11 @@
       if (s === "BAD.PA") return reponse(200, { chart: { result: [{ meta: { currency: "EUR" } }], error: null } });
       if (s === "SAUT.PA") return reponse(200, chart(9, "EUR", "Saut SA"));
       if (s === "GC=F") return reponse(200, chart(2400, "USD", "Gold"));
+      if (s === "MOMT.PA") {
+        const c = chart(13, "EUR", "Momentum SA");
+        c.chart.result[0].indicators = { quote: [{ close: [10, 10.2, 10.4, null, 10.8, 11, 11.2, 11.4, 11.6, 11.8, 12, 12.5, 13] }] };
+        return reponse(200, c);
+      }
       if (s === "USDEUR=X") return reponse(200, chart(0.9, "EUR", "USD/EUR"));
       if (s === "LENT.PA") return new Promise((_, rejeter) => init.signal.addEventListener("abort", () => rejeter(Object.assign(new Error("abandon"), { name: "AbortError" }))));
       return Promise.reject(new TypeError("Failed to fetch"));
@@ -311,6 +387,10 @@
     verifier("Réseau : compte rendu (6 à jour, 3 échecs, 1 ignorée)", JSON.stringify([r.misAJour, r.echecs, r.ignorees, r.diagnostic]), JSON.stringify([6, 3, 1, null]));
     verifier("Réseau : les lignes elles-mêmes ne sont pas modifiées", lignes[0].cours, 3.8);
     verifier("Réseau : aucune quantité ni aucun nom dans les adresses", demandes.some((u) => /Alpha|Equinor|quantite/.test(decodeURIComponent(u))), false);
+
+    demandes.length = 0;
+    const rm = await Reseau.actualiser([{ id: "m", nom: "Momentum", code: "MOMT", place: "XPAR", cours: 12 }], { fetch: fauxFetch, pause: 0, momentum: true });
+    verifier("Réseau : momentum demandé → clôtures mensuelles sur un an", JSON.stringify([demandes[0].includes("interval=1mo&range=1y"), arrondi(rm.resultats[0].momentum, 2), rm.resultats[0].prix]), JSON.stringify([true, 0.25, 13]));
 
     // Le navigateur bloque tout (CORS) : on s'arrête vite avec un diagnostic.
     demandes.length = 0;

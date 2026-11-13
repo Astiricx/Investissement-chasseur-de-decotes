@@ -12,6 +12,9 @@
                    solvabilite, bilanSolide, dateResultats, notes }],
        journal: [{ id, date, type, nom, code, quantite, prix, frais, total, plusValue, note }],
        historique: [{ date, titres, cash }]          (un point par jour, pour la courbe d'évolution)
+       carnet: [{ id, date, type: "achat"|"vente"|"suivi", nom, code, these, sortie, contre, raison, texte }]
+       gerants: [{ id, date, fonds, gerant, societe, code, mouvement, theme, source, note }]   (suivi « Smart Money »)
+       parametres.momentum: { actif, accepteLe }      (filtre momentum activé en connaissance de cause)
        analyses: [{ id, outil, nom, valeurs, modifieLe }]   (fiches enregistrées des outils d'analyse)
        coursActualisesLe: "2027-01-04T10:00:00.000Z" | null,
        modifieLe: "2027-01-04T10:00:00.000Z"
@@ -39,7 +42,10 @@
   /** Classes d'actifs. Le cash est suivi à part (paramètre « cash disponible »). */
   const CLASSES = Object.freeze({ decote: "Actions décotées", etf: "ETF", or: "Or et matières premières" });
   const OUTILS = Object.freeze(["vann", "rapp", "holding", "mine"]);
-  const MAX_HISTORIQUE = 3700, MAX_ANALYSES = 300;
+  const MAX_HISTORIQUE = 3700, MAX_ANALYSES = 300, MAX_CARNET = 3000, MAX_GERANTS = 3000;
+  const OUTILS_ETENDUS = ["vann", "rapp", "holding", "mine", "qualite"];
+  const TYPES_CARNET = ["achat", "vente", "suivi"];
+  const MOUVEMENTS = Object.freeze({ entree: "Entrée", renforcement: "Renforcement", allegement: "Allègement", sortie: "Sortie" });
   const TYPES_OPERATION = Object.freeze(["achat", "vente", "dividende"]);
 
   function identifiant() {
@@ -95,6 +101,8 @@
       prixRevient: positif(l.prixRevient),
       cours: positif(l.cours),
       dateCours: date(l.dateCours),
+      momentum: nombre(l.momentum),
+      dateMomentum: date(l.dateMomentum),
       objectif: positif(l.objectif),
       solvabilite: nombre(l.solvabilite),
       bilanSolide: typeof l.bilanSolide === "boolean" ? l.bilanSolide : null,
@@ -125,7 +133,7 @@
   /** Fiche d'analyse : valeurs plates (nombre, texte court ou vide), clés simples. */
   function normaliserAnalyse(a) {
     a = a && typeof a === "object" ? a : {};
-    if (!OUTILS.includes(a.outil)) return null;
+    if (!OUTILS_ETENDUS.includes(a.outil)) return null;
     const valeurs = {};
     const source = a.valeurs && typeof a.valeurs === "object" && !Array.isArray(a.valeurs) ? a.valeurs : {};
     for (const [k, v] of Object.entries(source).slice(0, 200)) {
@@ -135,6 +143,40 @@
     }
     const nom = texte(a.nom, 120);
     return nom ? { id: texte(a.id, 64) || identifiant(), outil: a.outil, nom, valeurs, modifieLe: typeof a.modifieLe === "string" ? a.modifieLe.slice(0, 40) : new Date().toISOString() } : null;
+  }
+
+  function normaliserCarnet(e) {
+    e = e && typeof e === "object" ? e : {};
+    if (!TYPES_CARNET.includes(e.type)) return null;
+    const r = {
+      id: texte(e.id, 64) || identifiant(), date: date(e.date), type: e.type,
+      nom: texte(e.nom, 120), code: texte(e.code, 24).toUpperCase().replace(/[^A-Z0-9.\-=]/g, ""),
+      these: texte(e.these, 4000), sortie: texte(e.sortie, 2000), contre: texte(e.contre, 2000),
+      raison: texte(e.raison, 40), texte: texte(e.texte, 4000),
+    };
+    return r.nom || r.code ? r : null;
+  }
+
+  /** « entrée », « Achat », « renforcement », « allègement », « vente »… → clé de MOUVEMENTS. */
+  function mouvementDepuisTexte(v) {
+    const s = simplifier(texte(v, 40));
+    if (Object.prototype.hasOwnProperty.call(MOUVEMENTS, s)) return s;
+    if (/entree|nouvelle|achat|initi/.test(s)) return "entree";
+    if (/renfor|hausse|augment/.test(s)) return "renforcement";
+    if (/allege|reduc|baisse|partiel/.test(s)) return "allegement";
+    if (/sortie|vente|cede|solde/.test(s)) return "sortie";
+    return null;
+  }
+
+  function normaliserMouvement(m) {
+    m = m && typeof m === "object" ? m : {};
+    const mouvement = mouvementDepuisTexte(m.mouvement);
+    const r = {
+      id: texte(m.id, 64) || identifiant(), date: date(m.date), fonds: texte(m.fonds, 120), gerant: texte(m.gerant, 120),
+      societe: texte(m.societe, 120), code: texte(m.code, 24).toUpperCase().replace(/[^A-Z0-9.\-=]/g, ""), mouvement,
+      theme: texte(m.theme, 60), source: texte(m.source, 300), note: texte(m.note, 500),
+    };
+    return r.fonds && r.societe && mouvement ? r : null;
   }
 
   /** Enregistre (ou remplace) le point du jour de l'historique de valeur. */
@@ -149,8 +191,8 @@
 
   function nouveauPortefeuille() {
     return {
-      version: VERSION, parametres: { capitalDepart: 10000, cash: 10000, relais: "" },
-      lignes: [], journal: [], historique: [], analyses: [], coursActualisesLe: null, modifieLe: new Date().toISOString(),
+      version: VERSION, parametres: { capitalDepart: 10000, cash: 10000, relais: "", momentum: { actif: false, accepteLe: null } },
+      lignes: [], journal: [], historique: [], analyses: [], carnet: [], gerants: [], coursActualisesLe: null, modifieLe: new Date().toISOString(),
     };
   }
 
@@ -166,12 +208,16 @@
         capitalDepart: positif(par.capitalDepart) ?? 10000,
         cash: positif(par.cash) ?? 0,
         relais: RELAIS.includes(par.relais) ? par.relais : "",
+        momentum: par.momentum && par.momentum.actif === true && typeof par.momentum.accepteLe === "string"
+          ? { actif: true, accepteLe: par.momentum.accepteLe.slice(0, 40) } : { actif: false, accepteLe: null },
       },
       lignes: (Array.isArray(o.lignes) ? o.lignes : []).slice(0, 500).map(normaliserLigne).filter((l) => l.nom),
       journal: (Array.isArray(o.journal) ? o.journal : []).slice(0, 5000).map(normaliserOperation),
       historique: (Array.isArray(o.historique) ? o.historique : []).slice(-MAX_HISTORIQUE).map(normaliserPoint).filter(Boolean)
         .sort((a, b) => a.date.localeCompare(b.date)).filter((h, i, t) => i === t.length - 1 || h.date !== t[i + 1].date),
       analyses: (Array.isArray(o.analyses) ? o.analyses : []).slice(0, MAX_ANALYSES).map(normaliserAnalyse).filter(Boolean),
+      carnet: (Array.isArray(o.carnet) ? o.carnet : []).slice(-MAX_CARNET).map(normaliserCarnet).filter(Boolean),
+      gerants: (Array.isArray(o.gerants) ? o.gerants : []).slice(-MAX_GERANTS).map(normaliserMouvement).filter(Boolean),
       coursActualisesLe: horodatage(o.coursActualisesLe),
       modifieLe: horodatage(o.modifieLe) || new Date().toISOString(),
     };
@@ -192,7 +238,7 @@
   }
 
   const api = { VERSION, PLACES, PLACE_DEFAUT, RELAIS, TYPES_OPERATION, CLASSES, OUTILS, placeDepuisTexte, classeDepuisTexte,
-    normaliserAnalyse, noterHistorique, MAX_ANALYSES,
+    normaliserAnalyse, noterHistorique, MAX_ANALYSES, normaliserCarnet, normaliserMouvement, mouvementDepuisTexte, MOUVEMENTS, MAX_GERANTS,
     nouveauPortefeuille, normaliser, normaliserLigne, normaliserOperation, ajouterLignes };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else racine.DecotesDonnees = api;

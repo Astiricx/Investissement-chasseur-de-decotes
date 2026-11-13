@@ -38,8 +38,9 @@
       return SYMBOLE_VALIDE.test(symbole) ? symbole : null;
     },
     symboleChange: (devise) => devise + "EUR=X",
-    adresses(symbole) {
-      const chemin = "/v8/finance/chart/" + encodeURIComponent(symbole) + "?interval=1d&range=1d";
+    adresses(symbole, avecHistorique) {
+      // Avec l'historique : clôtures mensuelles sur un an (le cours du jour reste dans « meta »).
+      const chemin = "/v8/finance/chart/" + encodeURIComponent(symbole) + (avecHistorique ? "?interval=1mo&range=1y" : "?interval=1d&range=1d");
       return ["https://query1.finance.yahoo.com" + chemin, "https://query2.finance.yahoo.com" + chemin];
     },
     lire(json) {
@@ -51,7 +52,9 @@
       }
       const meta = chart && Array.isArray(chart.result) && chart.result[0] && chart.result[0].meta;
       if (!meta) throw new ErreurReponse("Réponse sans données de cours");
+      const q = chart.result[0].indicators && chart.result[0].indicators.quote && chart.result[0].indicators.quote[0];
       return {
+        clotures: q && Array.isArray(q.close) ? q.close.filter((c) => typeof c === "number" && Number.isFinite(c) && c > 0) : [],
         prix: meta.regularMarketPrice,
         devise: meta.currency,
         horodatage: meta.regularMarketTime,
@@ -124,7 +127,7 @@
   async function coursSymbole(symbole, opts) {
     const f = opts.fournisseur, relais = RELAIS[opts.relais] || RELAIS[""];
     let derniereErreur = null;
-    for (const adresse of f.adresses(symbole)) {
+    for (const adresse of f.adresses(symbole, opts.momentumEnCours)) {
       try {
         const { json, introuvable } = await telecharger(relais.adresse(adresse), opts);
         if (introuvable) throw new ErreurIntrouvable("Code inconnu");
@@ -139,6 +142,16 @@
       }
     }
     throw derniereErreur;
+  }
+
+  /**
+   * Momentum « 12-1 » : variation entre la clôture d'il y a 12 mois et celle du mois dernier (le dernier mois est
+   * écarté, comme dans les études académiques). Calculé dans la devise de cotation : la conversion ne change pas un rapport.
+   */
+  function momentum(clotures) {
+    if (!Array.isArray(clotures) || clotures.length < 6) return null;
+    const debut = clotures[0], finMoinsUn = clotures[clotures.length - 2];
+    return debut > 0 ? finMoinsUn / debut - 1 : null;
   }
 
   function messageErreur(e) {
@@ -189,11 +202,12 @@
       if (opts.signal && opts.signal.aborted) break;
       let issue;
       try {
-        const r = await coursSymbole(symbole, opts);
+        const r = await coursSymbole(symbole, Object.assign({}, opts, { momentumEnCours: !!opts.momentum }));
         const { devise, diviseur } = devisePrincipale(r.devise);
         const t = await tauxVersEuro(devise);
         issue = { ok: true, prix: Math.round((r.prix / diviseur) * t * 10000) / 10000, prixOrigine: r.prix, devise: r.devise,
-          taux: devise === "EUR" ? null : t, date: dateLocale(r.horodatage, r.fuseau), nomFournisseur: String(r.nom).slice(0, 120) };
+          taux: devise === "EUR" ? null : t, date: dateLocale(r.horodatage, r.fuseau), nomFournisseur: String(r.nom).slice(0, 120),
+          momentum: opts.momentum ? momentum(r.clotures) : null };
         reussites++; echecsReseau = 0;
       } catch (e) {
         issue = { ok: false, erreur: messageErreur(e) };
@@ -224,7 +238,7 @@
     return { resultats, misAJour, echecs, ignorees, diagnostic, fournisseur: f.nom, relais: (RELAIS[opts.relais] || RELAIS[""]).nom };
   }
 
-  const api = { FOURNISSEURS, RELAIS, actualiser, devisePrincipale, dateLocale,
+  const api = { FOURNISSEURS, RELAIS, actualiser, devisePrincipale, dateLocale, momentum,
     ErreurReseau, ErreurIntrouvable, ErreurReponse, ErreurLimite, ErreurDelai };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else racine.DecotesReseau = api;

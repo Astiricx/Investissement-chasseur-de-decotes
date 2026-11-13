@@ -46,7 +46,7 @@
     if (!(op.quantite > 0)) erreurs.push(op.type === "dividende" ? "Indiquez le nombre de titres concernés." : "Indiquez le nombre de titres.");
     if (!(op.prix > 0)) erreurs.push(op.type === "dividende" ? "Indiquez le dividende par action." : "Indiquez le prix unitaire.");
 
-    const resultat = { op, place: saisie.place, enveloppe: saisie.enveloppe, classe: saisie.classe, erreurs, avertissements, ligne: { cible: null, action: null, avant: null, apres: null, probleme: null }, cash: null, plusValue: null };
+    const resultat = { op, place: saisie.place, enveloppe: saisie.enveloppe, classe: saisie.classe, objectif: saisie.objectif, solvabilite: saisie.solvabilite, erreurs, avertissements, ligne: { cible: null, action: null, avant: null, apres: null, probleme: null }, cash: null, plusValue: null };
     if (erreurs.length) return resultat;
 
     const brut = op.quantite * op.prix;
@@ -111,6 +111,7 @@
         pf.lignes.push(Donnees.normaliserLigne({
           nom: op.nom || op.code, code: op.code, place: apercu.place, enveloppe: apercu.enveloppe, classe: apercu.classe,
           quantite: L.apres.quantite, prixRevient: L.apres.prixRevient, cours: op.prix, dateCours: op.date,
+          objectif: apercu.objectif, solvabilite: apercu.solvabilite, notes: choix.carnet && choix.carnet.these,
         }));
       } else {
         const i = pf.lignes.indexOf(L.cible);
@@ -121,7 +122,56 @@
     }
     if (choix.majCash && apercu.cash) pf.parametres.cash = apercu.cash.apres;
     pf.journal.push(op);
+    // Carnet de bord : la thèse (achat) ou la raison (vente) accompagne l'opération.
+    if (choix.carnet && pf.carnet) {
+      const e = Donnees.normaliserCarnet(Object.assign({ date: op.date, type: op.type, nom: op.nom, code: op.code }, choix.carnet));
+      if (e) pf.carnet.push(e);
+    }
     return op;
+  }
+
+  // ---------------------------------------------------------------- Carnet de bord
+  /** Une thèse écrite avant tout achat : pourquoi acheter, quand vendre, ce qui donnerait tort. Longueurs minimales. */
+  const THESE = Object.freeze([
+    { cle: "these", titre: "Pourquoi acheter ?", aide: "Méthode et valeur retenues (VANN, VANE, RAPP…), prix maximal, raison de la décote, catalyseur.", min: 60 },
+    { cle: "sortie", titre: "Quand vendre ?", aide: "Objectif de vente, potentiel restant sous 20 %, signaux qui invalideraient la thèse.", min: 30 },
+    { cle: "contre", titre: "Qu'est-ce qui me donnerait tort ?", aide: "Les meilleurs arguments contraires que vous avez cherchés et lus.", min: 30 },
+  ]);
+  const RAISONS_VENTE = Object.freeze({
+    objectif: "Objectif atteint (VANT)", potentiel: "Potentiel restant sous 20 %", invalidee: "Thèse invalidée",
+    opportunite: "Meilleure opportunité ailleurs", liquidites: "Besoin de liquidités", autre: "Autre",
+  });
+
+  /** Vérifie une thèse : renvoie la liste des parties trop courtes. */
+  function verifierThese(t) {
+    t = t || {};
+    return THESE.filter((p) => String(t[p.cle] || "").trim().length < p.min)
+      .map((p) => `« ${p.titre} » : ${p.min} caractères au moins (${String(t[p.cle] || "").trim().length} saisis).`);
+  }
+
+  /** Dernière thèse écrite pour une société (par code, sinon par nom), ou null. */
+  function derniereThese(carnet, code, nom) {
+    const n = simplifier(nom);
+    const e = (carnet || []).filter((x) => x.type === "achat" && ((code && x.code === code) || (n && simplifier(x.nom) === n)))
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
+    return e || null;
+  }
+
+  /**
+   * Rotation du portefeuille sur 12 mois = min(achats, ventes) ÷ valeur moyenne du portefeuille.
+   * Repère du cours : environ 20 % par an quand le processus est strict.
+   */
+  function rotation(journal, historique, valeurActuelle, maintenant) {
+    const d = maintenant || new Date();
+    const debut = aujourdhui(new Date(d.getFullYear() - 1, d.getMonth(), d.getDate()));
+    const recentes = journal.filter((o) => o.date && o.date > debut && estNombre(o.total));
+    const achats = recentes.filter((o) => o.type === "achat").reduce((s, o) => s + o.total, 0);
+    const ventes = recentes.filter((o) => o.type === "vente").reduce((s, o) => s + o.total, 0);
+    const points = (historique || []).filter((h) => h.date > debut).map((h) => h.titres + h.cash);
+    const moyenne = points.length >= 2 ? points.reduce((s, v) => s + v, 0) / points.length : valeurActuelle;
+    const taux = moyenne > 0 ? Math.min(achats, ventes) / moyenne : null;
+    return { achats: centimes(achats), ventes: centimes(ventes), valeurMoyenne: moyenne, taux, repere: 0.20,
+      depasse: taux !== null && taux > 0.25, base: points.length >= 2 ? "historique" : "valeur actuelle" };
   }
 
   /** Journal trié du plus récent au plus ancien, et totaux par type. */
@@ -138,7 +188,7 @@
     return { operations: trie, totaux };
   }
 
-  const api = { preparer, appliquer, synthese, trouverLigne, aujourdhui };
+  const api = { preparer, appliquer, synthese, trouverLigne, aujourdhui, THESE, RAISONS_VENTE, verifierThese, derniereThese, rotation };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else racine.DecotesJournal = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

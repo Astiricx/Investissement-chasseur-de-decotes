@@ -287,6 +287,73 @@
     return liste;
   }
 
-  const api = { repartition, jauge, miniCourbe, courbe, barresClassees, graduations };
+  // ---------------------------------------------------------------- Radar (critères normalisés)
+  /**
+   * axes : [{ court, titre, score (0 à 2, ou null si non renseigné), texte (valeur lisible), seuil (texte), respecte }]
+   * Échelle commune : 1 = seuil tout juste atteint (cercle marqué), 2 = très largement atteint.
+   * La zone entre 1 et 2 est la « zone visée ». Un axe non renseigné est montré mais n'est pas relié.
+   */
+  function radar(axes, libelle) {
+    const racineEl = h("div", { class: "g-radar" });
+    const bulle = infobulle(racineEl);
+    let largeurDessinee = 0;
+    function dessiner() {
+      const L = Math.max(280, Math.min(520, Math.floor(racineEl.clientWidth || 360)));
+      if (L === largeurDessinee) return;
+      largeurDessinee = L;
+      const H = Math.round(L * 0.86), cx = L / 2, cy = H / 2 + 4;
+      const R = Math.min(L * 0.30, H * 0.36);
+      const n = axes.length;
+      const angle = (i) => -Math.PI / 2 + (2 * Math.PI * i) / n;
+      const pt = (i, sc) => [cx + Math.cos(angle(i)) * R * (sc / 2), cy + Math.sin(angle(i)) * R * (sc / 2)];
+      const poly = (sc) => axes.map((_, i) => pt(i, sc).map((v) => v.toFixed(1)).join(",")).join(" ");
+      const svg = s("svg", { class: "g-svg g-radar-svg", width: L, height: H, viewBox: `0 0 ${L} ${H}`, role: "img", "aria-label": libelle || "" });
+      // Zone visée (entre le seuil et le plafond), anneaux et rayons discrets.
+      svg.append(s("path", { class: "g-radar-zone", d: `M${poly(2).replace(/ /g, "L")}Z M${poly(1).split(" ").reverse().join("L")}Z`, "fill-rule": "evenodd" }));
+      for (const sc of [0.5, 1.5, 2]) svg.append(s("polygon", { class: "g-grille g-radar-anneau", points: poly(sc) }));
+      svg.append(s("polygon", { class: "g-radar-seuil", points: poly(1) }));
+      axes.forEach((a, i) => {
+        const [x, y] = pt(i, 2);
+        svg.append(s("line", { class: "g-grille", x1: cx, y1: cy, x2: x.toFixed(1), y2: y.toFixed(1) }));
+        const [lx, ly] = pt(i, 2.28);
+        const cos = Math.cos(angle(i));
+        const ancre = Math.abs(cos) < 0.2 ? "middle" : cos > 0 ? "start" : "end";
+        const t = texteSvg({ class: "g-radar-axe" + (a.score === null ? " na" : ""), x: lx.toFixed(1), y: (ly + 4).toFixed(1), "text-anchor": ancre }, a.court + (a.score === null ? " (n.d.)" : ""));
+        svg.append(t);
+      });
+      svg.append(texteSvg({ class: "g-graduation", x: (cx + 4).toFixed(1), y: (cy - R / 2 - 3).toFixed(1) }, "seuil"));
+      // Polygone des valeurs (axes renseignés seulement).
+      const pts = axes.map((a, i) => (a.score === null ? null : pt(i, Math.max(0.04, a.score))));
+      const valides = pts.filter(Boolean);
+      if (valides.length >= 3) svg.append(s("polygon", { class: "g-radar-valeur v1", points: valides.map((p) => p.map((v) => v.toFixed(1)).join(",")).join(" ") }));
+      axes.forEach((a, i) => {
+        if (!pts[i]) return;
+        const [x, y] = pts[i];
+        const g = s("g", { class: "g-radar-point", tabindex: "0", role: "img", "aria-label": `${a.titre} : ${a.texte}, seuil ${a.seuil}, ${a.respecte ? "respecté" : "non respecté"}` });
+        g.append(s("circle", { class: "g-zone-survol", cx: x.toFixed(1), cy: y.toFixed(1), r: 14 }));
+        const point = s("circle", { class: "g-point v1" + (a.respecte ? "" : " creux"), cx: x.toFixed(1), cy: y.toFixed(1), r: 5 });
+        g.append(point);
+        const montrer = () => {
+          const r = point.getBoundingClientRect(), rc = racineEl.getBoundingClientRect();
+          bulle.montrer([{ valeur: a.texte, nom: a.titre }, { valeur: (a.respecte ? "✓ " : "✕ ") + "seuil " + a.seuil }], r.left - rc.left + r.width / 2, r.top - rc.top);
+        };
+        g.addEventListener("pointerenter", montrer); g.addEventListener("focus", montrer);
+        g.addEventListener("pointerleave", bulle.cacher); g.addEventListener("blur", bulle.cacher);
+        svg.append(g);
+      });
+      const ancien = racineEl.querySelector("svg.g-svg");
+      if (ancien) ancien.replaceWith(svg); else racineEl.prepend(svg);
+    }
+    racineEl.append(h("ul", { class: "g-legende" }, [
+      h("li", {}, [h("span", { class: "g-trait v1" }), h("span", { texte: "La société" })]),
+      h("li", {}, [h("span", { class: "g-trait g-seuil-cle" }), h("span", { texte: "Seuil du critère" })]),
+      h("li", {}, [h("span", { class: "g-carre g-zone-cle" }), h("span", { texte: "Zone visée" })]),
+    ]));
+    if (typeof ResizeObserver === "function") new ResizeObserver(() => dessiner()).observe(racineEl);
+    requestAnimationFrame(dessiner);
+    return racineEl;
+  }
+
+  const api = { repartition, jauge, miniCourbe, courbe, barresClassees, radar, graduations };
   racine.DecotesGraphiques = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

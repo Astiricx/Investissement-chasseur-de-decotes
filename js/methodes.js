@@ -237,6 +237,107 @@
     return points;
   }
 
+  // ------------------------------------------------------------------ Qualité « action idéale » (critères Buffett, fiche du cours)
+  /**
+   * Critères de la fiche « Buffett et les états financiers ». sens : "min" (au moins le seuil) ou "max" (au plus le seuil).
+   * Chaque critère reçoit un score normalisé : 1 = seuil tout juste atteint, 2 = très largement atteint (plafond), 0 = très loin.
+   */
+  const CRITERES_QUALITE = Object.freeze([
+    { cle: "croissance", titre: "Croissance du résultat net", court: "Croissance RN", seuil: 0.15, sens: "min", unite: "%/an", aide: "Moyenne annuelle sur 4 à 10 ans." },
+    { cle: "margeNette", titre: "Marge nette", court: "Marge nette", seuil: 0.10, sens: "min", unite: "%", aide: "Résultat net ÷ chiffre d'affaires." },
+    { cle: "margeBrute", titre: "Marge brute", court: "Marge brute", seuil: 0.40, sens: "min", unite: "%", aide: "Résultat brut ÷ chiffre d'affaires : le meilleur signe d'un avantage." },
+    { cle: "frais", titre: "Frais commerciaux et administratifs ÷ résultat brut", court: "Frais / brut", seuil: 0.30, sens: "max", unite: "%", aide: "" },
+    { cle: "rd", titre: "R&D ÷ résultat brut", court: "R&D / brut", seuil: 0.05, sens: "max", unite: "%", aide: "" },
+    { cle: "interets", titre: "Charges d'intérêts ÷ résultat d'exploitation", court: "Intérêts / exploit.", seuil: 0.15, sens: "max", unite: "%", aide: "" },
+    { cle: "detteLT", titre: "Dette à long terme ÷ bénéfice net", court: "Dette LT / BN", seuil: 4, sens: "max", unite: "ans", aide: "En années de bénéfices." },
+    { cle: "dettesCP", titre: "Total des dettes ÷ capitaux propres", court: "Dettes / CP", seuil: 0.8, sens: "max", unite: "x", aide: "" },
+    { cle: "capex", titre: "Investissements ÷ bénéfice net (moyenne 4 ans)", court: "Capex / BN", seuil: 0.25, sens: "max", unite: "%", aide: "" },
+  ]);
+
+  /**
+   * q : { resultatNetDebut, resultatNetFin, annees, chiffreAffaires, resultatBrut, resultatNet, frais, rd,
+   *       interets, resultatExploitation, detteLT, totalDettes, capitauxPropres, capex4ans, resultatNet4ans }
+   * Renvoie { criteres: [{ ...critere, valeur, score, respecte }], respectes, evalues }.
+   */
+  function qualite(q) {
+    const div = (a, b) => (estNombre(a) && estNombre(b) && b !== 0 ? a / b : null);
+    const valeurs = {
+      croissance: q.resultatNetDebut > 0 && q.resultatNetFin > 0 && q.annees > 0 ? Math.pow(q.resultatNetFin / q.resultatNetDebut, 1 / q.annees) - 1 : null,
+      margeNette: div(q.resultatNet, q.chiffreAffaires),
+      margeBrute: div(q.resultatBrut, q.chiffreAffaires),
+      frais: div(q.frais, q.resultatBrut),
+      rd: div(q.rd, q.resultatBrut),
+      interets: div(q.interets, q.resultatExploitation),
+      detteLT: q.resultatNet > 0 ? div(q.detteLT, q.resultatNet) : null,
+      dettesCP: q.capitauxPropres > 0 ? div(q.totalDettes, q.capitauxPropres) : null,
+      capex: q.resultatNet4ans > 0 ? div(q.capex4ans, q.resultatNet4ans) : null,
+    };
+    const criteres = CRITERES_QUALITE.map((c) => {
+      const v = valeurs[c.cle];
+      let score = null;
+      if (estNombre(v)) {
+        if (c.sens === "min") score = v <= 0 ? 0 : Math.min(2, v / c.seuil);
+        else score = v <= 0 ? 2 : Math.min(2, c.seuil / v);
+      }
+      return Object.assign({}, c, { valeur: v, score, respecte: score === null ? null : score >= 1 - 1e-9 });
+    });
+    const evalues = criteres.filter((c) => c.respecte !== null);
+    return { criteres, evalues: evalues.length, respectes: evalues.filter((c) => c.respecte).length };
+  }
+
+  // ------------------------------------------------------------------ Assurance anti-krach (puts hors de la monnaie)
+  /** Fonction de répartition de la loi normale (approximation d'Abramowitz et Stegun, erreur < 1e-7). */
+  function repartitionNormale(x) {
+    const t = 1 / (1 + 0.2316419 * Math.abs(x));
+    const d = 0.3989422804014327 * Math.exp(-x * x / 2);
+    const p = d * t * (0.31938153 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+    return x >= 0 ? 1 - p : p;
+  }
+
+  /** Prix d'un put européen (Black-Scholes). S cours, K strike, T années, sigma volatilité, r taux sans risque. */
+  function prixPut(S, K, T, sigma, r) {
+    if (!(S > 0 && K > 0 && T > 0 && sigma > 0)) return null;
+    const d1 = (Math.log(S / K) + (r + sigma * sigma / 2) * T) / (sigma * Math.sqrt(T));
+    const d2 = d1 - sigma * Math.sqrt(T);
+    return K * Math.exp(-r * T) * repartitionNormale(-d2) - S * repartitionNormale(-d1);
+  }
+
+  /**
+   * o : { valeur (€), budget (0,01 à 0,03 par an), distance (0,30 à 0,35 sous le cours), volatilite, taux,
+   *       primeObservee (facultatif, en part du nominal), rendementMarche, rendementCash, krach (0,40), anneeKrach (5), annees (10) }
+   * Puts à 12 mois renouvelés chaque année. Dans les années sans krach, on suppose que l'indice finit au-dessus du strike
+   * (les puts expirent sans valeur). Renvoie la prime, le nominal couvert, des scénarios à l'échéance et une comparaison sur 10 ans.
+   */
+  function assurance(o) {
+    const prime = estNombre(o.primeObservee) && o.primeObservee > 0 ? o.primeObservee : prixPut(1, 1 - o.distance, 1, o.volatilite, o.taux || 0);
+    const couverture = prime > 0 ? o.budget / prime : 0;  // nominal couvert, en multiple de la valeur du portefeuille
+    const gainPuts = (baisse) => couverture * Math.max(0, (1 - o.distance) - (1 - baisse)); // en part du portefeuille
+    const scenario = (variation) => {
+      const sans = 1 + variation;
+      const avec = (1 - o.budget) * (1 + variation) + gainPuts(-variation);
+      return { variation, sans, avec, gain: gainPuts(-variation), multiple: o.budget > 0 ? gainPuts(-variation) / o.budget : 0 };
+    };
+    const scenarios = [-0.2, -0.3, -0.4, -0.5, -0.6].map(scenario);
+    const courbe = [];
+    for (let v = -0.6; v <= 0.2001; v += 0.02) courbe.push(scenario(Math.round(v * 100) / 100));
+
+    // Comparaison sur 10 ans : investi sans protection, investi avec puts, 85 % investi + 15 % de cash rééquilibré chaque année.
+    const annees = o.annees || 10;
+    function trajectoire(avecKrach) {
+      let sans = 1, assure = 1, cash = 1;
+      for (let a = 1; a <= annees; a++) {
+        const krach = avecKrach && a === (o.anneeKrach || 5);
+        const rm = krach ? -o.krach : o.rendementMarche;
+        sans *= 1 + rm;
+        assure *= (1 - o.budget) * (1 + rm) + (krach ? gainPuts(o.krach) : 0);
+        cash *= 0.85 * (1 + rm) + 0.15 * (1 + (o.rendementCash || 0));
+      }
+      return { sans: sans * o.valeur, assure: assure * o.valeur, cash: cash * o.valeur };
+    }
+    return { prime, primeEstimee: !(estNombre(o.primeObservee) && o.primeObservee > 0), couverture, cout: o.budget * o.valeur,
+      scenarios, courbe, sansKrach: trajectoire(false), avecKrach: trajectoire(true) };
+  }
+
   // ------------------------------------------------------------------ Exemples (fictifs)
   /** Exemple fictif construit sur les chiffres du cours : 5,0 → 4,7 M actions, frais 8,5 % → 8,2 %, 42 → 38 jours, (20 − 12) + 4 = 12 €. */
   const EXEMPLE_RAPP = Object.freeze({
@@ -262,7 +363,20 @@
     decotePays: 0.10, nbActions: 100, cours: 1.5,
   });
 
-  const api = { SEUILS, rapp, holding, mine, projection, EXEMPLE_RAPP, EXEMPLE_HOLDING, EXEMPLE_MINE };
+  /**
+   * Apple, exercice 2025 (clos le 27 septembre 2025), en millions de dollars. Source : rapport annuel 10-K déposé à la SEC.
+   * Croissance : résultat net 2021 (94 680) → 2025 (112 010), sur 4 ans. Capex et résultats nets 2022 à 2025.
+   * Charges d'intérêts : non publiées séparément dans le compte de résultat (critère laissé vide).
+   */
+  const EXEMPLE_APPLE = Object.freeze({
+    nom: "Apple (exercice 2025, 10-K)", resultatNetDebut: 94680, resultatNetFin: 112010, annees: 4,
+    chiffreAffaires: 416161, resultatBrut: 195201, resultatNet: 112010, frais: 27601, rd: 34550, resultatExploitation: 133050,
+    detteLT: 78328, totalDettes: 285508, capitauxPropres: 73733,
+    capex4ans: 10708 + 10959 + 9447 + 12715, resultatNet4ans: 99803 + 96995 + 93736 + 112010,
+  });
+
+  const api = { SEUILS, rapp, holding, mine, projection, qualite, CRITERES_QUALITE, assurance, prixPut, repartitionNormale,
+    EXEMPLE_RAPP, EXEMPLE_HOLDING, EXEMPLE_MINE, EXEMPLE_APPLE };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else racine.DecotesMethodes = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -6,7 +6,7 @@
   const D = window.Decotes, Donnees = window.DecotesDonnees, Coffre = window.DecotesCoffre, CSV = window.DecotesCSV;
   const Reseau = window.DecotesReseau, Journal = window.DecotesJournal;
   const Methodes = window.DecotesMethodes, Graphiques = window.DecotesGraphiques;
-  let patrimoine = null, analyses = null; // vues installées au démarrage (vue-patrimoine.js, vue-analyses.js)
+  let patrimoine = null, analyses = null, assurance = null, gerants = null; // vues installées au démarrage
   const P = D.PARAMETRES;
   const $ = (id) => document.getElementById(id);
   const TAILLE_MAX_FICHIER = 5 * 1024 * 1024;
@@ -23,6 +23,8 @@
     actualisation: null,   // AbortController de l'actualisation des cours en cours
     apercuOperation: null, // opération préparée, en attente de confirmation
     filtreClasse: "toutes",// filtre du tableau des lignes
+    filtreMomentum: false, // filtre « momentum positif » (seulement si le momentum a été activé)
+    operationPreremplie: null, // achat préparé depuis l'analyse VANN (objectif, solvabilité)
   };
   let stockage = null;
   try { stockage = window.localStorage; } catch (e) { stockage = null; }
@@ -147,7 +149,9 @@
     $("operations").tBodies[0].replaceChildren(); $("journal-totaux").replaceChildren();
     $("rapport-liste").replaceChildren(); $("rapport-cours").hidden = true;
     etat.filtreClasse = "toutes";
-    patrimoine.reinitialiser(); analyses.reinitialiser();
+    patrimoine.reinitialiser(); analyses.reinitialiser(); assurance.reinitialiser(); gerants.reinitialiser();
+    etat.filtreMomentum = false; $("carnet-liste").replaceChildren();
+    for (const id of ["dlg-momentum", "dlg-mouvement", "dlg-suivi"]) if ($(id).open) $(id).close();
     afficherVerrou(null, texteMessage);
   }
 
@@ -300,11 +304,21 @@
         { date: dansJours(-20), type: "vente", nom: "Omega Verrerie", code: "OMEG", quantite: 50, prix: 12.4, frais: 2, total: 618, plusValue: 203 },
         { date: dansJours(-10), type: "dividende", nom: "Bêta Textile", code: "BETA", quantite: 40, prix: 0.35, frais: 4.2, total: 9.8 },
       ],
+      carnet: [
+        { date: dansJours(-60), type: "achat", nom: "Alpha Industrie", code: "ALPH",
+          these: "Cotée à 57 % de sa VANE : immeubles achetés 9 M€ et inscrits 4 M€ au bilan. Solvabilité maison de 88 %. Prix maximal Net-Estate 4,27 €.",
+          sortie: "Vente à la VANT (7,50 €) ou si le potentiel restant passe sous 20 %. Sortie aussi si la solvabilité tombe sous 40 %.",
+          contre: "Les stocks tournent moins vite depuis deux ans : risque d'invendus. La famille contrôle le capital et peut ignorer les minoritaires." },
+        { date: dansJours(-20), type: "vente", nom: "Omega Verrerie", code: "OMEG", raison: "objectif", texte: "La VANT a été atteinte : vente mécanique, sans regret." },
+      ],
+      gerants: window.DecotesGerants.EXEMPLE.slice(),
       analyses: [
         { outil: "rapp", nom: Methodes.EXEMPLE_RAPP.nom, valeurs: Object.assign({ nom: Methodes.EXEMPLE_RAPP.nom, tsr: Methodes.EXEMPLE_RAPP.tauxSansRisque },
           ...Methodes.EXEMPLE_RAPP.annees.map((a, i) => Object.fromEntries(Object.entries(a).map(([k, v]) => [`a${i}_${k}`, v])))) },
       ],
     });
+    // Momentum fictif (affiché seulement si l'utilisateur active le filtre).
+    [0.18, 0.42, -0.21, -0.12, 0.05, 0.11, -0.08, 0.35, 0.16, 0.27].forEach((m, i) => { if (pf.lignes[i]) { pf.lignes[i].momentum = m; pf.lignes[i].dateMomentum = dansJours(-1); } });
     // Historique fictif sur neuf mois : une marche régulière qui aboutit à la valeur actuelle.
     const s = D.synthese(pf.lignes, pf.parametres.cash, P, new Date());
     let graine = 7;
@@ -338,7 +352,7 @@
     }
   }
 
-  function toutAfficher() { afficherBandeaux(); afficherTableau(); afficherJournal(); afficherDonnees(); analyses.afficherFiches(); }
+  function toutAfficher() { afficherBandeaux(); afficherTableau(); afficherJournal(); afficherDonnees(); analyses.afficherFiches(); gerants.afficher(); }
 
   // ================= Tableau de bord =================
   const CLASSE_STATUT = {
@@ -370,6 +384,8 @@
       indicateur("Points d'attention", String(s.lignesTropLourdes + s.resultatsProches + s.compte(S.A_COMPLETER)), `${s.lignesTropLourdes} ligne trop lourde · ${s.resultatsProches} publication proche · ${s.compte(S.A_COMPLETER)} à compléter`),
     );
     patrimoine.afficher(pf, s, Journal.aujourdhui());
+    assurance.actualiser(s.total);
+    afficherMomentum();
 
     $("resume-lignes").textContent = `${pluriel(s.detail.length, "ligne")} · ${fmt(fEur0, s.valeurTitres)} en titres`;
     const demo = etat.mode === "demo";
@@ -387,7 +403,10 @@
       b.addEventListener("click", () => { etat.filtreClasse = c; afficherTableau(); });
       return b;
     }));
-    const visibles = s.detail.filter((d) => etat.filtreClasse === "toutes" || d.classe === etat.filtreClasse);
+    const momentumActif = pf.parametres.momentum.actif;
+    $("th-momentum").hidden = !momentumActif;
+    const visibles = s.detail.filter((d) => (etat.filtreClasse === "toutes" || d.classe === etat.filtreClasse) &&
+      (!momentumActif || !etat.filtreMomentum || (estNombre(d.ligne.momentum) && d.ligne.momentum > 0)));
 
     $("aucune-ligne").hidden = s.detail.length > 0;
     $("lignes").hidden = s.detail.length === 0;
@@ -414,6 +433,7 @@
         cellule("Objectif", decote ? fmt(fEur, l.objectif) : vide),
         cellule("Potentiel", decote ? signe(d.potentiel) : vide),
         cellule("Poids", fmt(fPct, d.poids), "num" + (d.tropLourde ? " trop-lourd" : "")),
+        momentumActif ? cellule("Momentum 12-1", estNombre(l.momentum) ? signe(l.momentum) : "à actualiser", "num " + (l.momentum > 0 ? "hausse" : l.momentum < 0 ? "baisse" : "")) : null,
         el("td", { class: "c-statut" }, [el("span", { class: "statut " + CLASSE_STATUT[d.statut], texte: d.statut }), el("div", {}, puces)]),
         el("td", { class: "c-actions" }, modifier),
       ]);
@@ -455,6 +475,7 @@
     $("l-dateResultats").value = l.dateResultats || ""; $("l-notes").value = l.notes || "";
     $("l-nom").classList.remove("invalide");
     $("ligne-supprimer").hidden = !etat.ligneEnCours;
+    $("ligne-rappel-journal").hidden = !!etat.ligneEnCours;
     message("ligne-message", "");
     $("dlg-ligne").showModal();
   }
@@ -584,7 +605,7 @@
     let rapport = null;
     try {
       rapport = await Reseau.actualiser(pf.lignes, {
-        relais: pf.parametres.relais, signal: controleur.signal,
+        relais: pf.parametres.relais, signal: controleur.signal, momentum: pf.parametres.momentum.actif,
         progression: (fait, total) => { $("rapport-resume").textContent = `Actualisation : ${fait} / ${total} codes…`; },
       });
     } catch (e) {
@@ -599,7 +620,10 @@
     for (const r of rapport.resultats) {
       if (!r.ok) continue;
       const l = pf.lignes.find((x) => x.id === r.id); // une ligne supprimée entre-temps est ignorée
-      if (l) { l.cours = r.prix; l.dateCours = r.date; }
+      if (l) {
+        l.cours = r.prix; l.dateCours = r.date;
+        if (pf.parametres.momentum.actif && r.momentum !== null && r.momentum !== undefined) { l.momentum = r.momentum; l.dateMomentum = r.date; }
+      }
     }
     if (rapport.misAJour) { pf.coursActualisesLe = new Date().toISOString(); enregistrer(); }
     afficherTableau();
@@ -652,7 +676,9 @@
       indicateur("Ventes", fEur.format(t.vente), "Nettes de frais"),
       indicateur("Dividendes", fEur.format(t.dividende), "Nets de prélèvements"),
       indicateur("Plus-values réalisées", (t.plusValues > 0 ? "+" : "") + fEur.format(t.plusValues), `Frais payés : ${fEur.format(t.frais)}`),
+      indicateurRotation(),
     );
+    afficherCarnet();
     $("journal-resume").textContent = pluriel(s.operations.length, "opération");
     $("journal-vide").hidden = s.operations.length > 0;
     $("operations").hidden = s.operations.length === 0;
@@ -678,6 +704,103 @@
     }));
   }
 
+  // ----- Rotation du portefeuille (repère du cours : environ 20 % par an) -----
+  function indicateurRotation() {
+    const pf = etat.pf;
+    const s = D.synthese(pf.lignes, pf.parametres.cash, P, new Date());
+    const r = Journal.rotation(pf.journal, pf.historique, s.total, new Date());
+    const tuile = indicateur("Rotation sur 12 mois", r.taux === null ? vide : fPct0.format(r.taux),
+      (r.taux === null ? "Pas encore de base de calcul." : `min(achats, ventes) ÷ valeur moyenne. Repère : environ ${fPct0.format(r.repere)} par an`) + (r.depasse ? " — au-dessus du repère : processus moins strict ?" : "."));
+    if (r.depasse) tuile.classList.add("attention");
+    return tuile;
+  }
+
+  // ----- Carnet de bord : thèses, raisons de vente, notes de suivi -----
+  const LIBELLES_CARNET = { achat: "Achat · thèse", vente: "Vente", suivi: "Suivi" };
+
+  function afficherCarnet() {
+    const pf = etat.pf; if (!pf) return;
+    const groupes = new Map();
+    for (const e of pf.carnet.slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""))) {
+      const cle = e.code || e.nom.toLowerCase();
+      if (!groupes.has(cle)) groupes.set(cle, { nom: e.nom || e.code, entrees: [] });
+      groupes.get(cle).entrees.push(e);
+    }
+    $("carnet-vide").hidden = groupes.size > 0;
+    $("carnet-liste").replaceChildren(...[...groupes.values()].map((g) => el("section", { class: "carnet-societe" }, [
+      el("h3", { texte: g.nom }),
+      ...g.entrees.map((e) => {
+        const suppr = el("button", { type: "button", class: "lien", texte: "Supprimer", "aria-label": `Supprimer cette entrée du carnet (${g.nom})` });
+        suppr.addEventListener("click", () => {
+          if (!window.confirm("Supprimer cette entrée du carnet de bord ?")) return;
+          pf.carnet = pf.carnet.filter((x) => x.id !== e.id); enregistrer(); afficherCarnet();
+        });
+        const details = [];
+        if (e.type === "achat") for (const p of Journal.THESE) if (e[p.cle]) details.push(el("dt", { texte: p.titre }), el("dd", { texte: e[p.cle] }));
+        if (e.type === "vente") {
+          details.push(el("dt", { texte: "Raison" }), el("dd", { texte: Journal.RAISONS_VENTE[e.raison] || e.raison || "non précisée" }));
+          if (e.texte) details.push(el("dt", { texte: "Commentaire" }), el("dd", { texte: e.texte }));
+        }
+        if (e.type === "suivi") details.push(el("dd", { texte: e.texte }));
+        return el("article", { class: "entree-carnet e-" + e.type }, [
+          el("div", { class: "entete-entree" }, [el("span", { class: "type t-" + (e.type === "suivi" ? "dividende" : e.type), texte: LIBELLES_CARNET[e.type] }),
+            el("span", { class: "soc-code", texte: e.date ? fJourAn.format(versDate(e.date)) : "" }), suppr]),
+          el("dl", {}, details),
+        ]);
+      }),
+    ])));
+  }
+
+  /** Champs de la thèse, construits une fois, avec compteur de caractères. */
+  function construireThese() {
+    $("op-these-champs").replaceChildren(...Journal.THESE.map((p) => el("div", { class: "champ large" }, [
+      el("label", { for: "op-" + p.cle, texte: p.titre }),
+      el("textarea", { id: "op-" + p.cle, rows: p.cle === "these" ? "4" : "3", maxlength: "4000", "aria-describedby": "op-aide-" + p.cle }),
+      el("small", { id: "op-aide-" + p.cle, texte: p.aide }),
+      el("small", { class: "compteur", id: "op-compteur-" + p.cle }),
+    ])));
+    for (const p of Journal.THESE) $("op-" + p.cle).addEventListener("input", compterThese);
+    $("op-raison").replaceChildren(el("option", { value: "", texte: "Choisir une raison" }), ...Object.entries(Journal.RAISONS_VENTE).map(([k, v]) => el("option", { value: k, texte: v })));
+  }
+  function compterThese() {
+    for (const p of Journal.THESE) {
+      const n = $("op-" + p.cle).value.trim().length, c = $("op-compteur-" + p.cle);
+      c.textContent = n >= p.min ? `${n} caractères ✓` : `${n} / ${p.min} caractères minimum`;
+      c.classList.toggle("ok", n >= p.min);
+    }
+  }
+  /** Pour un renforcement : la dernière thèse de la société est reprise, à relire et mettre à jour. */
+  function reprendreThese() {
+    const e = Journal.derniereThese(etat.pf.carnet, $("op-code").value.trim().toUpperCase(), $("op-nom").value);
+    const vides = Journal.THESE.every((p) => !$("op-" + p.cle).value.trim() || $("op-" + p.cle).dataset.repris === "1");
+    if (e && vides) {
+      for (const p of Journal.THESE) { $("op-" + p.cle).value = e[p.cle] || ""; $("op-" + p.cle).dataset.repris = "1"; }
+      $("op-these-reprise").textContent = `Thèse écrite le ${e.date ? fJourAn.format(versDate(e.date)) : "?"} reprise : relisez-la et mettez-la à jour avant de renforcer.`;
+      $("op-these-reprise").hidden = false;
+      compterThese();
+    }
+  }
+
+  function installerCarnet() {
+    construireThese();
+    $("ajouter-suivi").addEventListener("click", () => {
+      $("f-suivi").reset(); message("sv-message", "");
+      $("sv-societes").replaceChildren(...etat.pf.lignes.map((l) => el("option", { value: l.nom })));
+      $("dlg-suivi").showModal();
+    });
+    $("sv-annuler").addEventListener("click", () => $("dlg-suivi").close());
+    $("f-suivi").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const nom = $("sv-societe").value.trim(), texte = $("sv-texte").value.trim();
+      if (!nom) return message("sv-message", "Indiquez la société.");
+      if (texte.length < 20) return message("sv-message", "Écrivez au moins 20 caractères.");
+      const ligne = Journal.trouverLigne(etat.pf, "", nom);
+      const entree = Donnees.normaliserCarnet({ date: Journal.aujourdhui(), type: "suivi", nom: ligne ? ligne.nom : nom, code: ligne ? ligne.code : "", texte });
+      etat.pf.carnet.push(entree); enregistrer();
+      $("dlg-suivi").close(); afficherCarnet();
+    });
+  }
+
   // ----- Saisie d'une opération : étape 1 (saisie), puis étape 2 (confirmation des mises à jour) -----
   const typeOperation = () => document.querySelector('input[name="op-type"]:checked').value;
 
@@ -696,6 +819,9 @@
     $("op-frais-libelle").textContent = type === "dividende" ? "Prélèvements (€)" : "Frais (€)";
     const existante = Journal.trouverLigne(etat.pf, $("op-code").value.trim().toUpperCase(), $("op-nom").value);
     $("op-nouvelle-ligne").hidden = type !== "achat" || !!existante;
+    $("op-bloc-these").hidden = type !== "achat";
+    $("op-vente-raison").hidden = type !== "vente";
+    if (type === "achat") reprendreThese();
   }
 
   function ouvrirOperation() {
@@ -703,6 +829,9 @@
     $("op-date").value = Journal.aujourdhui();
     $("op-place").value = Donnees.PLACE_DEFAUT;
     $("op-classe").value = "decote";
+    for (const p of Journal.THESE) { $("op-" + p.cle).value = ""; $("op-" + p.cle).dataset.repris = ""; }
+    $("op-these-reprise").hidden = true; $("op-these-analyse").hidden = true;
+    compterThese();
     $("op-societes").replaceChildren(...etat.pf.lignes.map((l) => el("option", { value: l.nom })));
     $("f-operation").querySelectorAll(".invalide").forEach((c) => c.classList.remove("invalide"));
     etat.apercuOperation = null;
@@ -750,9 +879,10 @@
         Journal.appliquer(etat.pf, a, {
           majLigne: !$("op-case-ligne").hidden && $("op-maj-ligne").checked,
           majCash: $("op-maj-cash").checked,
+          carnet: a.carnet,
         });
       } catch (err) { return message("op-message", err.message); }
-      etat.apercuOperation = null;
+      etat.apercuOperation = null; etat.operationPreremplie = null;
       $("dlg-operation").close();
       enregistrer(); toutAfficher();
       afficherBandeaux(`Opération enregistrée : ${LIBELLES_TYPE[a.op.type].toLowerCase()} ${a.op.nom || a.op.code}.`, true);
@@ -765,8 +895,18 @@
     const a = Journal.preparer(etat.pf, Object.assign(nombres, {
       type: typeOperation(), date: $("op-date").value, nom: $("op-nom").value, code: $("op-code").value,
       place: $("op-place").value, enveloppe: $("op-enveloppe").value, classe: $("op-classe").value, note: $("op-note").value,
-    }));
+    }, etat.operationPreremplie || {}));
     if (a.erreurs.length) return message("op-message", a.erreurs.join(" "));
+    // Carnet de bord : thèse obligatoire avant tout achat, raison obligatoire pour toute vente.
+    if (a.op.type === "achat") {
+      const these = Object.fromEntries(Journal.THESE.map((p) => [p.cle, $("op-" + p.cle).value.trim()]));
+      const manques = Journal.verifierThese(these);
+      if (manques.length) return message("op-message", "Thèse incomplète. " + manques.join(" "));
+      a.carnet = these;
+    } else if (a.op.type === "vente") {
+      if (!$("op-raison").value) return message("op-message", "Indiquez la raison de la vente.");
+      a.carnet = { raison: $("op-raison").value, texte: $("op-pourquoi").value.trim() };
+    }
     etat.apercuOperation = a;
     $("op-recap").textContent = texteRecap(a);
     $("op-avertissements").replaceChildren(...a.avertissements.map((t) => el("li", { texte: t })));
@@ -775,11 +915,13 @@
     if (a.ligne.action) $("op-texte-ligne").textContent = texteLigne(a);
     $("op-maj-cash").checked = true;
     $("op-texte-cash").textContent = `Ajuster le cash disponible : ${fEur.format(a.cash.avant)} → ${fEur.format(a.cash.apres)}.`;
+    $("op-texte-carnet").textContent = a.op.type === "achat" ? "Votre thèse sera enregistrée dans le carnet de bord avec cet achat."
+      : a.op.type === "vente" ? `Raison enregistrée dans le carnet de bord : ${Journal.RAISONS_VENTE[a.carnet.raison]}.` : "";
     etapeOperation(true);
   });
   $("op-retour").addEventListener("click", () => { etat.apercuOperation = null; etapeOperation(false); });
   $("op-annuler").addEventListener("click", () => { $("dlg-operation").close(); });
-  $("dlg-operation").addEventListener("close", () => { etat.apercuOperation = null; });
+  $("dlg-operation").addEventListener("close", () => { etat.apercuOperation = null; etat.operationPreremplie = null; });
 
   // ================= Calculatrice d'analyse =================
   const CHAMPS = [
@@ -880,24 +1022,80 @@
       el("li", {}, [el("span", { texte: t }), el("span", { class: ok ? "oui" : "non", texte: ok ? "Oui" : "Non" })])));
   }
 
-  // Reprend l'analyse dans une nouvelle ligne : cours, objectif (VANT par action) et solvabilité sont préremplis.
+  // Passe de l'analyse à l'achat : l'opération s'ouvre dans le journal, où la thèse est obligatoire.
+  // L'objectif (VANT par action) et la solvabilité sont repris sur la ligne créée.
   $("vers-portefeuille").addEventListener("click", () => {
     if (!analyse.complet) return;
     const r = analyse.resultat, arrondi = (v) => (estNombre(v) ? Math.round(v * 100) / 100 : null);
-    ouvrirLigne({
-      nom: (analyse.societe.nom || "").replace(/\s*\(exemple fictif\)\s*$/i, ""), cours: analyse.societe.cours, prixRevient: analyse.societe.cours,
-      objectif: r.vantParAction > 0 ? arrondi(r.vantParAction) : null,
-      solvabilite: estNombre(r.solvabilite) ? Math.round(r.solvabilite * 1000) / 1000 : null,
-    }, true);
+    const nom = (analyse.societe.nom || "").replace(/\s*\(exemple fictif\)\s*$/i, "");
+    afficherVue("journal");
+    ouvrirOperation();
+    $("op-nom").value = nom; $("op-prix").value = versChamp(analyse.societe.cours);
+    etat.operationPreremplie = { objectif: r.vantParAction > 0 ? arrondi(r.vantParAction) : null, solvabilite: estNombre(r.solvabilite) ? Math.round(r.solvabilite * 1000) / 1000 : null };
+    const resume = [`VANN ${fmt(fEur, r.vannParAction)}`, `VANE ${fmt(fEur, r.vaneParAction)}`, `VANT ${fmt(fEur, r.vantParAction)}`,
+      `prix maximal ${fmt(fEur, r.verdict.code === "net-net" ? r.prixMaxNetNet : r.prixMaxNetEstate)}`, `solvabilité ${fmt(fPct, r.solvabilite)}`, r.verdict.texte].join(" · ");
+    $("op-these-analyse").textContent = "Votre analyse : " + resume;
+    $("op-these-analyse").hidden = false;
+    ajusterOperation();
   });
+
+  // ================= Momentum (choix assumé) =================
+  // Les intervenants de la chaîne se contredisent sur le momentum : il n'est activable qu'après lecture des deux
+  // points de vue et acceptation explicite, et un rappel reste visible tant qu'il est actif.
+  function afficherMomentum() {
+    const pf = etat.pf; if (!pf) return;
+    const m = pf.parametres.momentum;
+    const zone = $("momentum-zone");
+    if (!m.actif) {
+      const b = el("button", { type: "button", class: "lien", texte: "Activer le filtre Momentum…" });
+      b.addEventListener("click", ouvrirMomentum);
+      zone.replaceChildren(b);
+      return;
+    }
+    const date = m.accepteLe ? fDate.format(new Date(m.accepteLe)) : "";
+    const filtre = el("button", { type: "button", class: "lien", texte: etat.filtreMomentum ? "Afficher toutes les lignes" : "Momentum positif seulement" });
+    filtre.addEventListener("click", () => { etat.filtreMomentum = !etat.filtreMomentum; afficherTableau(); });
+    const couper = el("button", { type: "button", class: "lien", texte: "Désactiver" });
+    couper.addEventListener("click", () => {
+      pf.parametres.momentum = { actif: false, accepteLe: null }; etat.filtreMomentum = false;
+      enregistrer(); afficherTableau();
+    });
+    zone.replaceChildren(
+      el("span", { class: "info-bulle" }, [
+        el("button", { type: "button", texte: "ⓘ Momentum activé", "aria-describedby": "bulle-momentum" }),
+        el("span", { class: "texte-bulle", id: "bulle-momentum", role: "tooltip", texte:
+          `Choix assumé le ${date}. Rappel : selon César et plusieurs études, ajouter le momentum à la value a historiquement amélioré les résultats ; ` +
+          "selon Franck, acheter ce qui monte va à l'encontre d'une démarche contrariante. Le momentum n'entre dans aucun statut ni aucune règle de vente." }),
+      ]), filtre, couper);
+  }
+
+  function ouvrirMomentum() {
+    $("momentum-accord").checked = false; $("momentum-activer").disabled = true;
+    $("dlg-momentum").showModal();
+  }
+
+  function installerMomentum() {
+    $("momentum-accord").addEventListener("change", () => { $("momentum-activer").disabled = !$("momentum-accord").checked; });
+    $("momentum-annuler").addEventListener("click", () => $("dlg-momentum").close());
+    $("f-momentum").addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (!$("momentum-accord").checked) return;
+      etat.pf.parametres.momentum = { actif: true, accepteLe: new Date().toISOString() };
+      $("dlg-momentum").close(); enregistrer(); afficherTableau();
+      afficherBandeaux(etat.mode === "demo" ? "Momentum activé (valeurs fictives en démonstration)." : "Momentum activé : il sera calculé à la prochaine actualisation des cours.", true);
+    });
+  }
 
   // ================= Démarrage =================
   const ctx = {
     $, el, G: Graphiques, M: Methodes, Donnees, P, etat, enregistrer, lireChamp, versChamp, estNombre, fEur, fEur0, fPct, fPct0,
     vann: { lire: () => Object.assign({}, analyse.societe), remplir: (v) => remplir(v), exemple: D.ALPHA_INDUSTRIE },
+    message, analyserSociete: (nom) => { afficherVue("analyse"); analyses.analyserSociete(nom); },
   };
   patrimoine = window.DecotesVuePatrimoine.creer(ctx);
   analyses = window.DecotesVueAnalyses.creer(ctx);
+  assurance = window.DecotesVueAssurance.creer(ctx);
+  gerants = window.DecotesVueGerants.creer(ctx);
   construireFormulaire();
   for (const [id, valeurs] of [["l-classe", Donnees.CLASSES], ["op-classe", Donnees.CLASSES]]) {
     $(id).replaceChildren(...Object.entries(valeurs).map(([cle, nom]) => el("option", { value: cle, texte: nom })));
@@ -909,6 +1107,10 @@
   $("formulaire").addEventListener("submit", (e) => e.preventDefault());
   patrimoine.installerSimulateur();
   analyses.installer();
+  assurance.installer();
+  gerants.installer();
+  installerCarnet();
+  installerMomentum();
   afficherVerrou();
 
   window.DecotesTests.pret.then((t) => {

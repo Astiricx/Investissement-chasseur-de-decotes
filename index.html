@@ -25,6 +25,7 @@
     <nav class="onglets" id="onglets" aria-label="Sections" hidden>
       <button type="button" class="onglet" data-vue="tableau" aria-current="page">Tableau</button>
       <button type="button" class="onglet" data-vue="analyse">Analyse</button>
+      <button type="button" class="onglet" data-vue="gerants">Gérants</button>
       <button type="button" class="onglet" data-vue="journal">Journal</button>
       <button type="button" class="onglet" data-vue="donnees">Données</button>
     </nav>
@@ -105,6 +106,7 @@
         </div>
       </div>
       <div class="puces-filtre" id="filtres-classe" role="group" aria-label="Filtrer par classe d'actif"></div>
+      <div class="momentum-zone" id="momentum-zone"></div>
       <p class="note" id="aucune-ligne" hidden>Aucune ligne pour l'instant. Ajoutez votre première action, ou importez vos lignes depuis l'onglet Données.</p>
       <div class="tableau-cadre">
         <table class="lignes" id="lignes">
@@ -117,6 +119,7 @@
               <th scope="col" class="num">Objectif</th>
               <th scope="col" class="num">Potentiel</th>
               <th scope="col" class="num">Poids</th>
+              <th scope="col" class="num" id="th-momentum" hidden>Momentum 12-1</th>
               <th scope="col">Statut</th>
               <th scope="col"><span class="invisible">Actions</span></th>
             </tr>
@@ -125,6 +128,7 @@
         </table>
       </div>
     </div>
+
     <div class="bloc">
       <div class="bloc-titre">
         <div>
@@ -143,6 +147,28 @@
       <div id="graphe-simulation"></div>
     </div>
 
+    <details class="bloc repli" id="bloc-assurance">
+      <summary><h2>Assurance anti-krach (puts)</h2></summary>
+      <p class="avertissement">Produit complexe : une option peut perdre 100 % de sa prime, et c'est le cas la plupart des années. Les options ne sont pas éligibles au PEA et demandent un compte-titres ouvert aux options sur indices. Outil pédagogique, pas un conseil.</p>
+      <form id="f-assurance" class="simulation assurance" autocomplete="off" novalidate>
+        <div class="champ large"><label for="as-valeur">Valeur à protéger (€)</label><input id="as-valeur" type="text" inputmode="decimal"></div>
+        <div class="champ large"><label for="as-budget">Budget par an : <output id="as-budget-valeur"></output></label><input id="as-budget" type="range" min="1" max="3" step="0.25" value="2"></div>
+        <div class="champ large"><label for="as-distance">Strike sous le cours : <output id="as-distance-valeur"></output></label><input id="as-distance" type="range" min="30" max="35" step="1" value="35"></div>
+        <div class="champ large"><label for="as-vol">Volatilité implicite (%)</label><input id="as-vol" type="text" inputmode="decimal" value="30"></div>
+        <div class="champ large"><label for="as-prime">Prime observée (% du nominal, facultatif)</label><input id="as-prime" type="text" inputmode="decimal" placeholder="ex. 1,2"></div>
+        <div class="champ large"><label for="as-taux">Taux sans risque (%)</label><input id="as-taux" type="text" inputmode="decimal" value="3"></div>
+        <div class="champ large"><label for="as-rendement">Rendement du marché (%/an)</label><input id="as-rendement" type="text" inputmode="decimal" value="8"></div>
+        <div class="champ large"><label for="as-cash">Rendement du cash (%/an)</label><input id="as-cash" type="text" inputmode="decimal" value="2"></div>
+        <div class="champ large"><label for="as-krach">Krach testé (baisse en %)</label><input id="as-krach" type="text" inputmode="decimal" value="40"></div>
+      </form>
+      <div id="as-resultats" class="pile"></div>
+      <p class="note">La formule de Black-Scholes avec une volatilité unique sous-estime en général le prix des puts très en dehors de la monnaie : saisissez la prime réellement cotée par votre courtier quand vous l'avez.</p>
+      <div class="encadre">
+        <p><strong>Le cas Universa (mars 2020).</strong> Le fonds de couverture de Mark Spitznagel, conseillé par Nassim Taleb, a annoncé +3 612 % en mars 2020 et +4 144 % depuis le début de l'année, d'après sa lettre aux clients rapportée par le Wall Street Journal, Bloomberg et Yahoo Finance.</p>
+        <p class="note">Ce rendement porte sur le petit capital consacré à la couverture, pas sur un portefeuille entier : l'effet sur le portefeuille dépend de la part qui lui est allouée, ici 1 à 3 % par an.</p>
+      </div>
+    </details>
+
     <details class="bloc repli">
       <summary><h2>Règles appliquées</h2></summary>
       <dl class="regles" id="regles"></dl>
@@ -160,6 +186,7 @@
       <button type="button" data-outil="rapp">RAPP</button>
       <button type="button" data-outil="holding">Holding</button>
       <button type="button" data-outil="mine">Mine</button>
+      <button type="button" data-outil="qualite">Qualité</button>
     </nav>
     <div class="bloc fiches">
       <div class="champ large"><label for="fiche-liste">Fiches enregistrées</label><select id="fiche-liste"></select></div>
@@ -205,6 +232,18 @@
       </div>
     </div>
 
+    <div class="outil" id="outil-qualite" hidden>
+      <div class="analyse">
+        <form id="f-qualite" class="bloc saisie" autocomplete="off" novalidate></form>
+        <div class="resultats">
+          <div class="bloc verdict" id="qualite-verdict" aria-live="polite"></div>
+          <div class="bloc"><h3>Le radar de l'« action idéale »</h3><div id="qualite-radar"></div></div>
+          <div class="bloc"><h3>Critère par critère</h3><ul class="criteres" id="qualite-criteres"></ul></div>
+          <p class="avertissement">Limite du modèle : seules les marques achetées figurent au bilan. Une marque créée en interne (l'iPhone pour Apple) n'y apparaît pas, donc les ratios de bilan ne montrent pas tout l'avantage concurrentiel. Chez Apple, les rachats d'actions réduisent aussi les capitaux propres, ce qui gonfle le ratio dettes ÷ capitaux propres.</p>
+        </div>
+      </div>
+    </div>
+
     <div class="outil" id="outil-mine" hidden>
       <div class="analyse">
         <form id="f-mine" class="bloc saisie" autocomplete="off" novalidate></form>
@@ -213,6 +252,55 @@
           <div class="bloc"><h3>Du gisement à la valeur par action</h3><dl class="valeurs" id="mine-valeurs"></dl></div>
           <p class="note" id="mine-precautions"></p>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Gérants (Smart Money) ============ -->
+  <section id="vue-gerants" class="vue" hidden>
+    <div class="bloc-titre">
+      <div>
+        <h2>Ce qu'achètent les gérants de référence</h2>
+        <p class="note">Une lecture parallèle des tendances de fond, avant votre propre analyse : jamais une raison d'acheter à elle seule.</p>
+      </div>
+    </div>
+    <p class="bandeau" id="bandeau-gerants" hidden></p>
+    <div class="puces-filtre" id="periode-gerants" role="group" aria-label="Période"></div>
+    <div class="indicateurs" id="gerants-indicateurs"></div>
+    <div class="bloc">
+      <p class="note" id="gerants-vide">Aucun mouvement pour l'instant. Saisissez les entrées et sorties publiées dans les lettres mensuelles et reportings des fonds que vous suivez, importez un fichier CSV, ou chargez l'exemple d'Indépendance AM.</p>
+      <div class="actions">
+        <button type="button" class="bouton principal" id="ajouter-mouvement">Ajouter un mouvement</button>
+        <label class="bouton fichier">Importer un CSV<input type="file" id="fichier-gerants" accept=".csv,.txt,text/csv,text/plain"></label>
+        <button type="button" class="bouton" id="exemple-gerants">Charger l'exemple Indépendance AM</button>
+      </div>
+      <div class="pile" id="gerants-import" hidden>
+        <p id="gerants-import-texte"></p>
+        <div class="actions"><button type="button" class="bouton principal" id="gerants-importer">Importer</button><button type="button" class="bouton" id="gerants-annuler-import">Annuler</button></div>
+      </div>
+      <p class="note">Pourquoi une saisie manuelle : les sources (lettres des fonds, reportings mensuels, déclarations 13F américaines) ne sont pas interrogeables depuis un navigateur sans serveur. CSV attendu : Date ; Fonds ; Gérant ; Société ; Code ; Mouvement (entrée, renforcement, allègement, sortie) ; Thème ; Source ; Note.</p>
+      <p class="note">Exemple : selon Épargnant 3.0 (septembre 2025), Indépendance France Small &amp; Mid, géré par William Higgons, comptait 428 M€ d'encours et une cinquantaine de lignes ; la vidéo évoque un peu plus de 400 M€ et une quarantaine de titres.</p>
+    </div>
+    <div class="bloc" id="bloc-societes-gerants">
+      <div class="bloc-titre"><h2>Sociétés suivies par les gérants</h2><p class="note">Solde = fonds acheteurs − fonds vendeurs sur la période</p></div>
+      <div class="tableau-cadre">
+        <table class="lignes" id="societes-gerants">
+          <thead><tr><th scope="col">Société</th><th scope="col">Fonds acheteurs</th><th scope="col">Fonds vendeurs</th><th scope="col" class="num">Solde</th><th scope="col" class="num">Dernier mouvement</th><th scope="col"><span class="invisible">Consensus</span></th><th scope="col"><span class="invisible">Actions</span></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="bloc" id="bloc-themes-gerants">
+      <div class="bloc-titre"><h2>Thèmes achetés</h2><p class="note">Les rotations de fond (énergie, cuivre…) vues à travers les achats des gérants</p></div>
+      <div id="themes-gerants"></div>
+    </div>
+    <div class="bloc">
+      <div class="bloc-titre"><h2>Mouvements</h2><p class="note" id="nb-mouvements"></p></div>
+      <div class="tableau-cadre">
+        <table class="lignes" id="mouvements-gerants">
+          <thead><tr><th scope="col">Société</th><th scope="col">Mouvement</th><th scope="col">Fonds</th><th scope="col">Source</th><th scope="col"><span class="invisible">Actions</span></th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </div>
   </section>
@@ -248,6 +336,17 @@
           <tbody></tbody>
         </table>
       </div>
+    </div>
+    <div class="bloc">
+      <div class="bloc-titre">
+        <div>
+          <h2>Carnet de bord</h2>
+          <p class="note">Vos thèses écrites avant chaque achat, vos raisons de vendre et vos notes de suivi : de quoi garder un processus « mécanique et méchant ».</p>
+        </div>
+        <button type="button" class="bouton" id="ajouter-suivi">Ajouter une note de suivi</button>
+      </div>
+      <p class="note" id="carnet-vide">Le carnet se remplit à chaque achat (thèse obligatoire) et à chaque vente (raison obligatoire).</p>
+      <div id="carnet-liste" class="carnet"></div>
     </div>
   </section>
 
@@ -330,6 +429,7 @@
       <div class="champ large"><label for="l-solvabilite">Solvabilité maison (%)</label><input id="l-solvabilite" type="text" inputmode="decimal"></div>
       <div class="champ large"><label for="l-bilanSolide">Bilan toujours solide ?</label><select id="l-bilanSolide"><option value="">Non renseigné</option><option value="oui">Oui</option><option value="non">Non</option></select></div>
     </div>
+    <p class="note" id="ligne-rappel-journal" hidden>Pour un nouvel achat, passez plutôt par l'onglet Journal : la thèse y est obligatoire et le cash est mis à jour. Cette fiche sert à reprendre une position existante.</p>
     <p class="note aide-code">Code bourse : le code court (ALPH) avec sa place de cotation, ou le code Yahoo complet (ALPH.PA). Or : code GC=F, place « Autre », quantité en onces. Pour un ETF ou de l'or, l'objectif et la solvabilité sont facultatifs.</p>
     <div class="champ large"><label for="l-dateResultats">Prochaine publication de résultats</label><input id="l-dateResultats" type="date"></div>
     <div class="champ large"><label for="l-notes">Thèse et notes</label><textarea id="l-notes" rows="3" maxlength="2000"></textarea></div>
@@ -368,6 +468,23 @@
         <div class="champ large"><label for="op-enveloppe">Enveloppe</label><select id="op-enveloppe"><option>PEA</option><option>CTO</option></select></div>
       </div>
       <div class="champ large"><label for="op-note">Note</label><input id="op-note" type="text" maxlength="500"></div>
+
+      <fieldset class="these" id="op-bloc-these">
+        <legend>Ma thèse d'investissement (obligatoire)</legend>
+        <p class="note" id="op-these-reprise" hidden></p>
+        <p class="note" id="op-these-analyse" hidden></p>
+        <div id="op-these-champs"></div>
+        <aside class="encadre echo">
+          <p><strong>Biais de la chambre d'écho.</strong> Une étude publiée en 2023 dans la <em>Review of Financial Studies</em> (Cookson, Engelberg et Mullins), portant sur environ 400 000 utilisateurs de StockTwits, montre que les investisseurs s'exposent surtout aux avis qui confirment le leur. Ces convictions « en chambre d'écho » vont de pair avec des rendements plus faibles et davantage d'échanges.</p>
+          <p class="note">Avant d'acheter, écrivez les meilleurs arguments contraires que vous avez cherchés.</p>
+        </aside>
+      </fieldset>
+
+      <fieldset class="these" id="op-vente-raison" hidden>
+        <legend>Pourquoi je vends (obligatoire)</legend>
+        <div class="champ large"><label for="op-raison">Raison</label><select id="op-raison"></select></div>
+        <div class="champ large"><label for="op-pourquoi">Commentaire</label><textarea id="op-pourquoi" rows="2" maxlength="4000"></textarea></div>
+      </fieldset>
     </div>
 
     <div id="op-confirmation" hidden>
@@ -375,6 +492,7 @@
       <ul class="liste-fine avertissements" id="op-avertissements"></ul>
       <label class="case" id="op-case-ligne"><input type="checkbox" id="op-maj-ligne" checked><span id="op-texte-ligne"></span></label>
       <label class="case" id="op-case-cash"><input type="checkbox" id="op-maj-cash" checked><span id="op-texte-cash"></span></label>
+      <p class="note" id="op-texte-carnet"></p>
     </div>
 
     <p class="message" id="op-message" role="alert" hidden></p>
@@ -383,6 +501,57 @@
       <button type="button" class="bouton" id="op-retour" hidden>Modifier la saisie</button>
       <button type="button" class="bouton" id="op-annuler">Annuler</button>
     </div>
+  </form>
+</dialog>
+
+<!-- ============ Activation du momentum ============ -->
+<dialog id="dlg-momentum" class="dialogue">
+  <form id="f-momentum" novalidate>
+    <h2>Activer le filtre Momentum ?</h2>
+    <p>Le momentum mesure la tendance du cours : ici, la variation entre il y a 12 mois et le mois dernier (« 12-1 »). Les intervenants de la chaîne ne sont pas d'accord sur son usage.</p>
+    <div class="debat">
+      <div class="encadre"><p><strong>Pour (César, et plusieurs études empiriques)</strong></p><p>Ajouter un filtre de momentum à une approche value a historiquement amélioré les résultats.</p></div>
+      <div class="encadre"><p><strong>Contre (Franck)</strong></p><p>Acheter ce qui monte, c'est suivre les flux acheteurs : l'inverse d'une démarche contrariante qui achète ce que le marché délaisse.</p></div>
+    </div>
+    <p class="note">Ce que fait l'outil : il affiche le momentum 12-1 de chaque ligne (calculé à l'actualisation des cours) et propose un filtre « momentum positif ». Il ne modifie aucun statut ni aucune règle d'achat ou de vente.</p>
+    <label class="case"><input type="checkbox" id="momentum-accord"><span>J'ai lu ces deux points de vue et j'active ce filtre en connaissance de cause.</span></label>
+    <div class="actions">
+      <button type="submit" class="bouton principal" id="momentum-activer" disabled>Activer</button>
+      <button type="button" class="bouton" id="momentum-annuler">Annuler</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ============ Mouvement d'un gérant ============ -->
+<dialog id="dlg-mouvement" class="dialogue">
+  <form id="f-mouvement" autocomplete="off" novalidate>
+    <h2>Mouvement d'un gérant</h2>
+    <div class="deux">
+      <div class="champ large"><label for="mv-fonds">Fonds</label><input id="mv-fonds" type="text" maxlength="120" list="mv-fonds-liste"></div>
+      <div class="champ large"><label for="mv-gerant">Gérant</label><input id="mv-gerant" type="text" maxlength="120"></div>
+      <div class="champ large"><label for="mv-societe">Société</label><input id="mv-societe" type="text" maxlength="120"></div>
+      <div class="champ large"><label for="mv-code">Code bourse</label><input id="mv-code" type="text" maxlength="24" autocapitalize="characters" spellcheck="false"></div>
+      <div class="champ large"><label for="mv-mouvement">Mouvement</label><select id="mv-mouvement"></select></div>
+      <div class="champ large"><label for="mv-date">Date du reporting</label><input id="mv-date" type="date"></div>
+    </div>
+    <datalist id="mv-fonds-liste"></datalist><datalist id="mv-theme-liste"></datalist>
+    <div class="champ large"><label for="mv-theme">Thème (énergie, cuivre…)</label><input id="mv-theme" type="text" maxlength="60" list="mv-theme-liste"></div>
+    <div class="champ large"><label for="mv-source">Source</label><input id="mv-source" type="text" maxlength="300" placeholder="Lettre mensuelle, reporting, article…"></div>
+    <div class="champ large"><label for="mv-note">Note</label><input id="mv-note" type="text" maxlength="500"></div>
+    <p class="message" id="mv-message" role="alert" hidden></p>
+    <div class="actions"><button type="submit" class="bouton principal">Enregistrer</button><button type="button" class="bouton" id="mv-annuler">Annuler</button></div>
+  </form>
+</dialog>
+
+<!-- ============ Note de suivi ============ -->
+<dialog id="dlg-suivi" class="dialogue">
+  <form id="f-suivi" autocomplete="off" novalidate>
+    <h2>Note de suivi</h2>
+    <div class="champ large"><label for="sv-societe">Société</label><input id="sv-societe" type="text" maxlength="120" list="sv-societes"></div>
+    <datalist id="sv-societes"></datalist>
+    <div class="champ large"><label for="sv-texte">Ce qui a changé (résultats, bilan, thèse confirmée ou affaiblie…)</label><textarea id="sv-texte" rows="5" maxlength="4000"></textarea></div>
+    <p class="message" id="sv-message" role="alert" hidden></p>
+    <div class="actions"><button type="submit" class="bouton principal">Enregistrer la note</button><button type="button" class="bouton" id="sv-annuler">Annuler</button></div>
   </form>
 </dialog>
 
@@ -399,9 +568,12 @@
 <script src="js/journal.js"></script>
 <script src="js/methodes.js"></script>
 <script src="js/graphiques.js"></script>
+<script src="js/gerants.js"></script>
 <script src="js/tests.js"></script>
 <script src="js/vue-patrimoine.js"></script>
 <script src="js/vue-analyses.js"></script>
+<script src="js/vue-assurance.js"></script>
+<script src="js/vue-gerants.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

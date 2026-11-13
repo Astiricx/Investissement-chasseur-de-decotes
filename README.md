@@ -21,7 +21,9 @@ Suivi de portefeuille boursier selon la méthode Net-Net / Daubasses. Outil pers
 - `js/methodes.js` : RAPP (4 ratios sur 8 exercices), holding (ANR), mine (méthode Oceana Gold), projection d'intérêts composés.
 - `js/graphiques.js` : composants graphiques SVG sans bibliothèque (répartition, courbe avec infobulle, jauge, mini-courbe, barres).
 - `js/vue-patrimoine.js` : tableau de bord patrimonial (répartition, jauge du cash, évolution, simulateur).
-- `js/vue-analyses.js` : sous-onglets d'analyse et fiches enregistrées.
+- `js/vue-analyses.js` : sous-onglets d'analyse (VANN/VANE, RAPP, holding, mine, qualité Buffett) et fiches enregistrées.
+- `js/gerants.js` et `js/vue-gerants.js` : suivi « Smart Money » des mouvements des gérants (agrégation par société et par thème, import CSV).
+- `js/vue-assurance.js` : simulateur d'assurance anti-krach (puts hors de la monnaie, Black-Scholes, comparaison sur 10 ans).
 - `js/tests.js` : les tests, exécutés à chaque chargement de la page.
 - `js/app.js` : l'interface.
 
@@ -50,7 +52,15 @@ Ouvrir `index.html` dans un navigateur. Pour lancer les tests seuls : `node js/t
 - Itération 2 : portefeuille chiffré enregistré dans le navigateur, export et restauration d'une sauvegarde, import CSV, fiche de saisie d'une ligne.
 - Itération 3 : actualisation des cours (Yahoo Finance, conversion en euros, rapport détaillé), journal des opérations avec mise à jour proposée de la ligne et du cash, place de cotation.
 - Itération 4 : classes d'actifs (actions décotées, ETF, or et matières premières), répartition, jauge du cash 5-15 %, courbe d'évolution (un point par jour), plus-value latente, simulateur d'intérêts composés ; analyses RAPP, holding et mine avec fiches enregistrées dans le coffre.
+- Itération 5 : carnet de bord (thèse obligatoire avant tout achat, raison de vente, notes de suivi, rotation sur 12 mois), radar de l'« action idéale » (critères Buffett, exemple Apple 10-K 2025), suivi des gérants, assurance anti-krach, momentum 12-1 activable seulement après acceptation explicite.
 - À venir : installation sur téléphone (application web hors connexion).
+
+## Sources des chiffres cités dans l'interface
+
+- Étude « Echo Chambers » : Cookson, Engelberg et Mullins, *Review of Financial Studies*, 2023, environ 400 000 utilisateurs de StockTwits.
+- Apple : rapport annuel 10-K de l'exercice 2025 (SEC) et résultats annuels 2021-2022.
+- Universa : lettre aux clients d'avril 2020 rapportée par le Wall Street Journal, Bloomberg et Yahoo Finance (+3 612 % en mars, +4 144 % depuis le début de l'année, sur le capital de couverture).
+- Indépendance AM : Épargnant 3.0 (septembre 2025) ; entrées sur SEB et Électricité de Strasbourg citées dans la vidéo, non vérifiées.
 
 ## Graphiques
 

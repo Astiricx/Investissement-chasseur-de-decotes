@@ -282,20 +282,80 @@ textarea { resize: vertical; }
 .participations { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 6px 10px; }
 .participations input { min-height: 40px; }
 
+/* ---------- Itération 5 : carnet, radar, gérants, assurance, momentum ---------- */
+.encadre { background: var(--gris-f); border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; font-size: .9rem; }
+.these { border: 1px solid var(--trait); border-radius: 10px; padding: 10px 14px 14px; margin: 12px 0 0; display: grid; gap: 8px; }
+.these legend { font-weight: 700; color: var(--accent); padding: 0 4px; }
+.compteur { text-align: right; } .compteur.ok { color: var(--vert); }
+.echo { margin-top: 4px; }
+.carnet { display: grid; gap: 14px; }
+.carnet-societe { border-top: 1px solid var(--trait); padding-top: 12px; display: grid; gap: 8px; }
+.carnet-societe:first-child { border-top: 0; padding-top: 0; }
+.carnet-societe h3 { margin: 0; }
+.entree-carnet { display: grid; gap: 4px; font-size: .9rem; padding-left: 12px; border-left: 3px solid var(--trait); }
+.entree-carnet.e-achat { border-left-color: var(--v1); } .entree-carnet.e-vente { border-left-color: var(--v3); } .entree-carnet.e-suivi { border-left-color: var(--v-muet); }
+.entree-carnet .entete-entree { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.entree-carnet dl { margin: 0; display: grid; gap: 2px; }
+.entree-carnet dt { font-weight: 600; font-size: .82rem; color: var(--encre2); }
+.entree-carnet dd { margin: 0 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+#journal-totaux { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.indic.attention .indic-valeur { color: var(--jaune); }
+.indicateurs.trois { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.g-radar { position: relative; display: grid; justify-items: center; }
+.g-radar-svg { width: 100%; max-width: 520px; height: auto; }
+.g-radar-zone { fill: var(--gris-f); }
+.g-radar-anneau { fill: none; }
+.g-radar-seuil { fill: none; stroke: var(--v-axe); stroke-width: 1.5; }
+.g-radar-valeur { fill: var(--c); fill-opacity: .1; stroke: var(--c); stroke-width: 2; stroke-linejoin: round; }
+.g-radar-axe { fill: var(--encre2); font-size: 11px; }
+.g-radar-axe.na { fill: var(--v-muet); }
+.g-radar-point { outline: none; cursor: default; }
+.g-radar-point:focus-visible .g-point { stroke: #eb6834; stroke-width: 3; }
+.g-point.creux { fill: var(--carte); stroke: var(--c); stroke-width: 2; }
+.g-seuil-cle { --c: var(--v-axe); }
+.g-zone-cle { background: var(--gris-f); opacity: 1; }
+.criteres { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: .9rem; }
+.criteres li { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 2px 8px; align-items: baseline; }
+.critere-icone { font-weight: 700; text-align: center; }
+.oui-ligne .critere-icone { color: var(--vert); } .non-ligne .critere-icone { color: var(--rouge); } .na .critere-icone, .criteres .na { color: var(--encre2); }
+.critere-valeur { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.critere-seuil { grid-column: 2 / -1; font-size: .8rem; color: var(--encre2); }
+.table-simple { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.table-simple th { text-align: left; font-weight: 600; color: var(--encre2); font-size: .78rem; padding: 6px 8px; border-bottom: 1px solid var(--trait); }
+.table-simple td { padding: 8px; border-bottom: 1px solid var(--trait); font-variant-numeric: tabular-nums; }
+.table-simple .num { text-align: right; }
+.assurance { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#as-resultats h3 { margin: 10px 0 0; }
+.momentum-zone { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -2px 0 10px; font-size: .85rem; }
+.momentum-zone .lien { min-height: 32px; }
+.info-bulle { position: relative; display: inline-flex; }
+.info-bulle > button { font: inherit; font-size: .82rem; font-weight: 600; border: 1px solid var(--jaune); color: var(--jaune); background: var(--jaune-f); border-radius: 999px; padding: 5px 10px; min-height: 32px; cursor: help; }
+.info-bulle .texte-bulle { display: none; position: absolute; z-index: 4; left: 0; top: calc(100% + 6px); width: min(320px, 80vw); background: var(--carte); color: var(--encre); border: 1px solid var(--trait); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.14); padding: 10px 12px; font-size: .82rem; font-weight: 400; line-height: 1.45; }
+.info-bulle:hover .texte-bulle, .info-bulle:focus-within .texte-bulle { display: block; }
+.debat { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+.lignes td.texte-court { overflow-wrap: anywhere; }
+.lignes td.source { color: var(--encre2); font-size: .82rem; max-width: 280px; }
+@media (min-width: 721px) { .lignes td.texte-court { text-align: left; } }
+
 /* Téléphone */
 @media (max-width: 860px) {
   .indicateurs { grid-template-columns: repeat(2, 1fr); }
   .analyse, .grille-donnees, .grille-graphiques, .grille-ratios { grid-template-columns: 1fr; }
-  .simulation { grid-template-columns: 1fr 1fr; }
+  .simulation, .assurance { grid-template-columns: 1fr 1fr; }
+  #journal-totaux { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .indicateurs.trois { grid-template-columns: 1fr; }
+  .debat { grid-template-columns: 1fr; }
   .fiches { grid-template-columns: 1fr; }
   .rapp-entete { grid-template-columns: 1fr; }
+  .sous-onglets button { padding: 8px 4px; font-size: .8rem; }
+  .lignes td.texte-court { grid-column: 1 / -1; flex-direction: column; align-items: flex-start; text-align: left; gap: 2px; }
   .resultats { position: static; }
 }
 @media (max-width: 720px) {
   .entete-int { padding-top: 10px; }
   .marque { padding-bottom: 2px; }
   .onglets { width: 100%; }
-  .onglet { flex: 1; padding-inline: 2px; font-size: .9rem; }
+  .onglet { flex: 1; padding-inline: 1px; font-size: .84rem; }
   .bloc-titre .actions { margin-left: 0; width: 100%; }
   .bloc-titre .actions .bouton { flex: 1; }
   /* Chaque ligne du tableau devient une fiche. */

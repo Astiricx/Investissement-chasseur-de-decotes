@@ -225,6 +225,40 @@
       }
     }
 
+    // ---------------------------------------------------------------- Qualité « action idéale » (radar Buffett)
+    function construireQualite() {
+      prefixe = "qualite";
+      $("f-qualite").replaceChildren(
+        el("p", { class: "note", texte: "Montants en millions, dans la devise des comptes. Critères de la fiche « Buffett et les états financiers »." }),
+        groupe("La société", [champ("nom", "Nom", "texte")]),
+        groupe("Compte de résultat (dernier exercice)", [
+          champ("chiffreAffaires", "Chiffre d'affaires"), champ("resultatBrut", "Résultat brut (marge brute)"),
+          champ("frais", "Frais commerciaux et administratifs"), champ("rd", "Recherche et développement"),
+          champ("resultatExploitation", "Résultat d'exploitation"), champ("interets", "Charges d'intérêts", "nombre", "Laisser vide si non publiées."),
+          champ("resultatNet", "Résultat net"),
+        ]),
+        groupe("Croissance du résultat net", [champ("resultatNetDebut", "Résultat net il y a N années"), champ("annees", "N (nombre d'années, 4 à 10)")]),
+        groupe("Bilan", [champ("detteLT", "Dette à long terme"), champ("totalDettes", "Total des dettes (passif)"), champ("capitauxPropres", "Capitaux propres")]),
+        groupe("Quatre derniers exercices", [champ("capex4ans", "Investissements (capex) cumulés"), champ("resultatNet4ans", "Résultats nets cumulés")]),
+      );
+    }
+    const formatCritere = (c, v) => (!estNombre(v) ? "non renseigné" : c.unite === "ans" ? `${fNb1.format(v)} an${v >= 2 ? "s" : ""}` : c.unite === "x" ? fNb2.format(v) : fPct1.format(v) + (c.unite === "%/an" ? " par an" : ""));
+    const formatSeuil = (c) => (c.sens === "min" ? "≥ " : "≤ ") + (c.unite === "ans" ? `${c.seuil} ans` : c.unite === "x" ? fNb1.format(c.seuil) : fPct0.format(c.seuil) + (c.unite === "%/an" ? " par an" : ""));
+    function calculerQualite() {
+      const v = lireFormulaire($("f-qualite"));
+      const r = M.qualite(Object.assign({}, v, { resultatNetFin: v.resultatNet }));
+      verdictBloc("qualite-verdict", v.nom, r.evalues === 0 ? "" : r.respectes === r.evalues ? "ok" : r.respectes >= r.evalues / 2 ? "vigilance" : "alerte",
+        r.evalues === 0 ? "Saisissez les comptes pour évaluer les critères." : `${r.respectes} critère${r.respectes > 1 ? "s" : ""} respecté${r.respectes > 1 ? "s" : ""} sur ${r.evalues} évalué${r.evalues > 1 ? "s" : ""}.`);
+      $("qualite-radar").replaceChildren(G.radar(r.criteres.map((c) => ({ court: c.court, titre: c.titre, score: c.score, texte: formatCritere(c, c.valeur), seuil: formatSeuil(c), respecte: c.respecte })),
+        `Radar de qualité : ${r.respectes} critères respectés sur ${r.evalues}`));
+      $("qualite-criteres").replaceChildren(...r.criteres.map((c) => el("li", { class: c.respecte === null ? "na" : c.respecte ? "oui-ligne" : "non-ligne" }, [
+        el("span", { class: "critere-icone", texte: c.respecte === null ? "–" : c.respecte ? "✓" : "✕", "aria-label": c.respecte === null ? "non évalué" : c.respecte ? "respecté" : "non respecté" }),
+        el("span", { class: "critere-nom", texte: c.titre }),
+        el("span", { class: "critere-valeur", texte: formatCritere(c, c.valeur) }),
+        el("span", { class: "critere-seuil", texte: formatSeuil(c) }),
+      ])));
+    }
+
     // ---------------------------------------------------------------- Outils et fiches
     const OUTILS = {
       vann: { note: "VANN, VANE et VANT à partir du bilan. Montants en millions d'euros, cours en euros.",
@@ -233,6 +267,8 @@
         lire: () => lireFormulaire($("f-rapp")), remplir: (v) => { remplirFormulaire($("f-rapp"), v); calculerRapp(); }, exemple: () => aplatirRapp(M.EXEMPLE_RAPP), videParDefaut: rappVide },
       holding: { note: "Actif net réévalué (ANR) d'une holding : achat quand elle cote au moins 30 % sous son ANR.",
         lire: () => lireFormulaire($("f-holding")), remplir: (v) => { remplirFormulaire($("f-holding"), v); calculerHolding(); }, exemple: () => aplatirHolding(M.EXEMPLE_HOLDING), videParDefaut: () => null },
+      qualite: { note: "L'« action idéale » selon les critères de Buffett : marges, croissance, dette, investissements.",
+        lire: () => lireFormulaire($("f-qualite")), remplir: (v) => { remplirFormulaire($("f-qualite"), v); calculerQualite(); }, exemple: () => Object.assign({}, M.EXEMPLE_APPLE), videParDefaut: () => null },
       mine: { note: "Valeur prudente d'une mine d'or ou d'argent à partir de ses réserves, sans parier sur une hausse du métal.",
         lire: () => lireFormulaire($("f-mine")), remplir: (v) => { remplirFormulaire($("f-mine"), v); calculerMine(); }, exemple: () => Object.assign({}, M.EXEMPLE_MINE), videParDefaut: () => null },
     };
@@ -282,11 +318,12 @@
     }
 
     function installer() {
-      construireRapp(); construireHolding(); construireMine();
+      construireRapp(); construireHolding(); construireMine(); construireQualite();
+      $("f-qualite").addEventListener("input", calculerQualite);
       $("f-rapp").addEventListener("input", calculerRapp);
       $("f-holding").addEventListener("input", calculerHolding);
       $("f-mine").addEventListener("input", calculerMine);
-      for (const id of ["f-rapp", "f-holding", "f-mine"]) $(id).addEventListener("submit", (e) => e.preventDefault());
+      for (const id of ["f-rapp", "f-holding", "f-mine", "f-qualite"]) $(id).addEventListener("submit", (e) => e.preventDefault());
       document.querySelectorAll("#sous-onglets button").forEach((b) => b.addEventListener("click", () => afficherOutil(b.dataset.outil)));
       $("fiche-liste").addEventListener("change", () => {
         const fiche = ctx.etat.pf && ctx.etat.pf.analyses.find((a) => a.id === $("fiche-liste").value);
@@ -306,7 +343,14 @@
       afficherOutil("vann");
     }
 
-    return { installer, reinitialiser, afficherFiches: () => afficherFiches(), afficherOutil };
+    /** Ouvre l'outil VANN / VANE sur une société (formulaire vidé, nom prérempli). */
+    function analyserSociete(nom) {
+      afficherOutil("vann");
+      ctx.vann.remplir({ nom });
+      $("fiche-etat").textContent = `Analyse de « ${nom} » : saisissez son bilan.`;
+    }
+
+    return { installer, reinitialiser, afficherFiches: () => afficherFiches(), afficherOutil, analyserSociete };
   }
 
   racine.DecotesVueAnalyses = { creer };
