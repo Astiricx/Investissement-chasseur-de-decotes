@@ -8,6 +8,7 @@
   const CSV = sousNode ? require("./csv.js") : racine.DecotesCSV;
   const Reseau = sousNode ? require("./reseau.js") : racine.DecotesReseau;
   const Journal = sousNode ? require("./journal.js") : racine.DecotesJournal;
+  const M = sousNode ? require("./methodes.js") : racine.DecotesMethodes;
   const resultats = [];
   const arrondi = (v, d) => Math.round(v * 10 ** d) / 10 ** d;
   function verifier(nom, obtenu, attendu) {
@@ -163,9 +164,78 @@
   verifier("Place : « Euronext Paris » → XPAR", Donnees.placeDepuisTexte("Euronext Paris"), "XPAR");
   verifier("Place : « Oslo Børs » → XOSL", Donnees.placeDepuisTexte("Oslo Børs"), "XOSL");
   verifier("Place : inconnue → Paris par défaut", Donnees.normaliserLigne({ nom: "X", place: "Mars" }).place, "XPAR");
-  verifier("Code : caractères dangereux retirés", Donnees.normaliserLigne({ nom: "X", code: "ab/../c?d=1" }).code, "AB..CD1");
+  verifier("Code : caractères dangereux retirés (« = » gardé pour GC=F)", Donnees.normaliserLigne({ nom: "X", code: "ab/../c?d&=1" }).code, "AB..CD=1");
   verifier("Ancienne sauvegarde sans relais ni place lisible", JSON.stringify([Donnees.normaliser({ version: 1, lignes: [{ nom: "X" }] }).parametres.relais, Donnees.normaliser({ version: 1, lignes: [{ nom: "X" }] }).lignes[0].place]), JSON.stringify(["", "XPAR"]));
   verifier("CSV : colonne « Place de cotation » lue", Donnees.normaliserLigne(CSV.lirePortefeuille("Société;Code;Place de cotation;Quantité\nAlpha;ALPH;Oslo;10").lignes[0]).place, "XOSL");
+
+
+  // 11. Patrimoine : classes d'actifs, plus-values latentes, cash.
+  const lignesP = [
+    { nom: "Alpha", quantite: 100, prixRevient: 3.5, cours: 4, objectif: 7.5, solvabilite: 0.88 },
+    { nom: "ETF Small Cap Value", classe: "etf", quantite: 10, prixRevient: 50, cours: 60 },
+    { nom: "Or", classe: "or", quantite: 2, prixRevient: 1800, cours: 2000 },
+    { nom: "ETF sans cours", classe: "etf", quantite: 5, prixRevient: 20, cours: null },
+  ];
+  const sp = D.synthese(lignesP, 500, null, new Date(2027, 0, 4));
+  verifier("Patrimoine : ETF au statut SUIVI", sp.detail[1].statut, S.SUIVI);
+  verifier("Patrimoine : ligne non décotée sans cours → À COMPLÉTER", sp.detail[3].statut, S.A_COMPLETER);
+  verifier("Patrimoine : valeur par classe", JSON.stringify(sp.parClasse), JSON.stringify({ decote: 400, etf: 600, or: 4000 }));
+  verifier("Patrimoine : plus-value latente totale = 50 + 100 + 400", sp.pvLatente, 550);
+  verifier("Patrimoine : or à 72 % non signalé comme ligne trop lourde", sp.detail[2].tropLourde, false);
+  verifier("Patrimoine : action à 7,3 % signalée", sp.detail[0].tropLourde, true);
+  verifier("Patrimoine : cash à 9 % dans la zone 5-15 %", sp.zoneCash, "ok");
+  verifier("Patrimoine : cash à 2 % sous la zone", D.synthese(lignesP, 100, null, new Date()).zoneCash, "bas");
+  verifier("Patrimoine : cash à 50 % au-dessus de la zone", D.synthese(lignesP, 5000, null, new Date()).zoneCash, "haut");
+  verifier("Classe : texte du fichier Excel reconnu", JSON.stringify(["Net-Estate (VANE)", "ETF Monde", "Mines d'or", "Or physique", ""].map(Donnees.classeDepuisTexte)), JSON.stringify(["decote", "etf", "or", "or", null]));
+  verifier("Classe : ancienne ligne sans classe = action décotée", Donnees.normaliserLigne({ nom: "X" }).classe, "decote");
+
+  // 12. Historique et fiches d'analyse.
+  const ph = Donnees.nouveauPortefeuille();
+  Donnees.noterHistorique(ph, "2027-01-04", 1000, 9000);
+  Donnees.noterHistorique(ph, "2027-01-03", 900, 9000);
+  Donnees.noterHistorique(ph, "2027-01-04", 1100, 9000);
+  verifier("Historique : un point par jour, trié, dernier gardé", JSON.stringify(ph.historique.map((h) => [h.date, h.titres])), JSON.stringify([["2027-01-03", 900], ["2027-01-04", 1100]]));
+  const fiche = Donnees.normaliserAnalyse({ outil: "rapp", nom: "Bêta", valeurs: { a0_actions: 5, "mauvaise clé": 1, note: "x".repeat(500), objet: { a: 1 } } });
+  verifier("Fiche : valeurs nettoyées", JSON.stringify([Object.keys(fiche.valeurs), fiche.valeurs.note.length]), JSON.stringify([["a0_actions", "note"], 200]));
+  verifier("Fiche : outil inconnu refusé", Donnees.normaliserAnalyse({ outil: "autre", nom: "X" }), null);
+
+  // 13. RAPP : l'exemple du cours.
+  const rp = M.rapp(M.EXEMPLE_RAPP.annees, 0.03);
+  const ratio = (cle) => rp.ratios.find((r) => r.cle === cle);
+  verifier("RAPP : actions 5,0 → 4,7 M (rachats)", JSON.stringify([ratio("actions").debut, ratio("actions").fin, ratio("actions").verdict]), JSON.stringify([5, 4.7, "ok"]));
+  verifier("RAPP : frais 8,5 % → 8,2 %", JSON.stringify([arrondi(ratio("frais").debut, 3), arrondi(ratio("frais").fin, 3), ratio("frais").verdict]), JSON.stringify([0.085, 0.082, "ok"]));
+  verifier("RAPP : stockage 42 → 38 jours", JSON.stringify([Math.round(ratio("stocks").debut), Math.round(ratio("stocks").fin), ratio("stocks").verdict]), JSON.stringify([42, 38, "ok"]));
+  verifier("RAPP : création de valeur (20 − 12) + 4 = 12 €", JSON.stringify([ratio("creation").debut, ratio("creation").fin, arrondi(ratio("creation").dividendes, 2), arrondi(ratio("creation").creation, 2)]), JSON.stringify([12, 20, 4, 12]));
+  verifier("RAPP : rendement 10,4 %/an > 3 % + 3 points, et > hausse du cours 4,0 %/an", JSON.stringify([arrondi(ratio("creation").rendement, 3), arrondi(ratio("creation").hausseCours, 3), ratio("creation").verdict]), JSON.stringify([0.104, 0.04, "ok"]));
+  verifier("RAPP : 4 ratios au vert", rp.synthese.ok, 4);
+  const degrade = M.EXEMPLE_RAPP.annees.map((a, i) => Object.assign({}, a, { actions: a.actions * (1 + i * 0.02), fraisGeneraux: a.chiffreAffaires * (0.085 + i * 0.006), stocks: a.coutVentes * (42 + i * 8) / 365 }));
+  const rd = M.rapp(degrade, 0.03);
+  verifier("RAPP : dilution, frais et stocks qui dérivent → alertes", rd.ratios.slice(0, 3).map((r) => r.verdict).join(","), "alerte,alerte,alerte");
+  verifier("RAPP : décote sur les stocks suggérée", rd.ratios[2].decoteSuggeree, true);
+  verifier("RAPP : rendement > taux sans risque mais < hausse du cours → vigilance", M.rapp(M.EXEMPLE_RAPP.annees.map((a, i) => Object.assign({}, a, { cours: 5 * Math.pow(1.2, i) })), 0.03).ratios[3].verdict, "vigilance");
+  verifier("RAPP : taux sans risque de 9 % → alerte", M.rapp(M.EXEMPLE_RAPP.annees, 0.12).ratios[3].verdict, "alerte");
+  verifier("RAPP : un seul exercice → incomplet", M.rapp([M.EXEMPLE_RAPP.annees[0]], 0.03).synthese.incomplet, 4);
+  verifier("RAPP : société sans stocks → sans objet", M.rapp(M.EXEMPLE_RAPP.annees.map((a) => Object.assign({}, a, { stocks: 0 })), 0.03).ratios[2].verdict, "na");
+
+  // 14. Holding et mine.
+  const ho = M.holding(M.EXEMPLE_HOLDING);
+  verifier("Holding : ANR = 435 + 40 − 25 = 450 M€, soit 45 € par action", JSON.stringify([ho.anr, ho.anrParAction]), JSON.stringify([450, 45]));
+  verifier("Holding : décote de 33 % → achat possible, prix maximal 31,50 €", JSON.stringify([arrondi(ho.decote, 3), arrondi(ho.prixMax, 2), ho.verdict.code]), JSON.stringify([0.333, 31.5, "achat"]));
+  verifier("Holding : cours à 40 € → attendre", M.holding(Object.assign({}, M.EXEMPLE_HOLDING, { cours: 40 })).verdict.code, "attendre");
+  verifier("Holding : dettes > participations → exclue", M.holding(Object.assign({}, M.EXEMPLE_HOLDING, { dettes: 600 })).verdict.code, "exclue");
+  const mi = M.mine(M.EXEMPLE_MINE);
+  verifier("Mine : réserves retenues 2 + 0,5 + 0 = 2,5 Moz", mi.reservesRetenues, 2.5);
+  verifier("Mine : marge nette par once (2 000 × 0,7 − 1 000) × 0,6 = 240", arrondi(mi.margeNette, 6), 240);
+  verifier("Mine : valeur prudente 299,7 M, soit 3,00 par action", JSON.stringify([arrondi(mi.valeurFinale, 4), arrondi(mi.parAction, 3)]), JSON.stringify([299.7, 2.997]));
+  verifier("Mine : cours de l'or implicite ≈ 1 824", Math.round(mi.coursOrImplicite), 1824);
+  verifier("Mine : vérification, à 1 824 la valeur égale la capitalisation", arrondi(M.mine(Object.assign({}, M.EXEMPLE_MINE, { coursOr: mi.coursOrImplicite })).valeurFinale, 4), 150);
+  verifier("Mine : coût > or décoté → exclue", M.mine(Object.assign({}, M.EXEMPLE_MINE, { coutProduction: 1500 })).verdict.code, "exclue");
+
+  // 15. Projection (intérêts composés).
+  const pj10 = M.projection(10000, 0.10, 10, 0);
+  verifier("Projection : 10 000 € à 10 % sur 10 ans = 25 937,42 €", arrondi(pj10[10].valeur, 2), 25937.42);
+  const pj20 = M.projection(10000, 0.07, 20, 250);
+  verifier("Projection : + 250 €/mois à 7 % sur 20 ans = 165 580,94 €", JSON.stringify([arrondi(pj20[20].valeur, 2), pj20[20].verse, pj20.length]), JSON.stringify([165580.94, 70000, 21]));
 
   // 9. Coffre chiffré (itérations réduites pour que le test reste instantané).
   async function testsCoffre() {
@@ -206,11 +276,14 @@
       if (s === "ZZZZ.PA") return reponse(404, { chart: { result: null, error: { code: "Not Found", description: "No data found, symbol may be delisted" } } });
       if (s === "BAD.PA") return reponse(200, { chart: { result: [{ meta: { currency: "EUR" } }], error: null } });
       if (s === "SAUT.PA") return reponse(200, chart(9, "EUR", "Saut SA"));
+      if (s === "GC=F") return reponse(200, chart(2400, "USD", "Gold"));
+      if (s === "USDEUR=X") return reponse(200, chart(0.9, "EUR", "USD/EUR"));
       if (s === "LENT.PA") return new Promise((_, rejeter) => init.signal.addEventListener("abort", () => rejeter(Object.assign(new Error("abandon"), { name: "AbortError" }))));
       return Promise.reject(new TypeError("Failed to fetch"));
     };
     const lignes = [
       { id: "1", nom: "Alpha", code: "ALPH", place: "XPAR", cours: 3.8 },
+      { id: "10", nom: "Or", code: "GC=F", place: "XPAR", cours: 1900 },
       { id: "2", nom: "Alpha (CTO)", code: "ALPH.PA", place: "XPAR", cours: 3.8 },
       { id: "3", nom: "Equinor", code: "EQNR", place: "XOSL", cours: 25 },
       { id: "4", nom: "Vodafone", code: "VOD", place: "XLON", cours: 80 },
@@ -234,7 +307,8 @@
     verifier("Réseau : réponse sans cours refusée", /inexploitable/.test(par["7"].erreur), true);
     verifier("Réseau : délai dépassé signalé", /Pas de réponse/.test(par["8"].erreur), true);
     verifier("Réseau : variation de +80 % signalée", JSON.stringify([par["9"].ok, par["9"].alerte]), JSON.stringify([true, true]));
-    verifier("Réseau : compte rendu (5 à jour, 3 échecs, 1 ignorée)", JSON.stringify([r.misAJour, r.echecs, r.ignorees, r.diagnostic]), JSON.stringify([5, 3, 1, null]));
+    verifier("Réseau : or GC=F en dollars converti (2 400 $ × 0,9 = 2 160 €)", par["10"].prix, 2160);
+    verifier("Réseau : compte rendu (6 à jour, 3 échecs, 1 ignorée)", JSON.stringify([r.misAJour, r.echecs, r.ignorees, r.diagnostic]), JSON.stringify([6, 3, 1, null]));
     verifier("Réseau : les lignes elles-mêmes ne sont pas modifiées", lignes[0].cours, 3.8);
     verifier("Réseau : aucune quantité ni aucun nom dans les adresses", demandes.some((u) => /Alpha|Equinor|quantite/.test(decodeURIComponent(u))), false);
 

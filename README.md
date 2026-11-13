@@ -18,6 +18,10 @@ Suivi de portefeuille boursier selon la méthode Net-Net / Daubasses. Outil pers
 - `js/csv.js` : la lecture des fichiers CSV, sans bibliothèque.
 - `js/reseau.js` : le seul module qui accède au réseau (cours de bourse). Fournisseur interchangeable.
 - `js/journal.js` : la logique du journal (achats, ventes, dividendes, prix de revient, cash).
+- `js/methodes.js` : RAPP (4 ratios sur 8 exercices), holding (ANR), mine (méthode Oceana Gold), projection d'intérêts composés.
+- `js/graphiques.js` : composants graphiques SVG sans bibliothèque (répartition, courbe avec infobulle, jauge, mini-courbe, barres).
+- `js/vue-patrimoine.js` : tableau de bord patrimonial (répartition, jauge du cash, évolution, simulateur).
+- `js/vue-analyses.js` : sous-onglets d'analyse et fiches enregistrées.
 - `js/tests.js` : les tests, exécutés à chaque chargement de la page.
 - `js/app.js` : l'interface.
 
@@ -45,4 +49,9 @@ Ouvrir `index.html` dans un navigateur. Pour lancer les tests seuls : `node js/t
 - Itération 1 : tableau de bord et calculatrice d'analyse.
 - Itération 2 : portefeuille chiffré enregistré dans le navigateur, export et restauration d'une sauvegarde, import CSV, fiche de saisie d'une ligne.
 - Itération 3 : actualisation des cours (Yahoo Finance, conversion en euros, rapport détaillé), journal des opérations avec mise à jour proposée de la ligne et du cash, place de cotation.
+- Itération 4 : classes d'actifs (actions décotées, ETF, or et matières premières), répartition, jauge du cash 5-15 %, courbe d'évolution (un point par jour), plus-value latente, simulateur d'intérêts composés ; analyses RAPP, holding et mine avec fiches enregistrées dans le coffre.
 - À venir : installation sur téléphone (application web hors connexion).
+
+## Graphiques
+
+Les graphiques sont dessinés en SVG par `js/graphiques.js`, sans Chart.js : la politique de sécurité n'autorise que les scripts du site, et aucune dépendance n'est chargée. Palette catégorielle validée (daltonisme, contraste) en clair et en sombre ; les couleurs suivent toujours la même classe d'actifs ; chaque couleur est accompagnée d'un nom et d'un montant.

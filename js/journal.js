@@ -46,7 +46,7 @@
     if (!(op.quantite > 0)) erreurs.push(op.type === "dividende" ? "Indiquez le nombre de titres concernés." : "Indiquez le nombre de titres.");
     if (!(op.prix > 0)) erreurs.push(op.type === "dividende" ? "Indiquez le dividende par action." : "Indiquez le prix unitaire.");
 
-    const resultat = { op, place: saisie.place, enveloppe: saisie.enveloppe, erreurs, avertissements, ligne: { cible: null, action: null, avant: null, apres: null, probleme: null }, cash: null, plusValue: null };
+    const resultat = { op, place: saisie.place, enveloppe: saisie.enveloppe, classe: saisie.classe, erreurs, avertissements, ligne: { cible: null, action: null, avant: null, apres: null, probleme: null }, cash: null, plusValue: null };
     if (erreurs.length) return resultat;
 
     const brut = op.quantite * op.prix;
@@ -109,7 +109,7 @@
     if (choix.majLigne && L.action) {
       if (L.action === "creer") {
         pf.lignes.push(Donnees.normaliserLigne({
-          nom: op.nom || op.code, code: op.code, place: apercu.place, enveloppe: apercu.enveloppe,
+          nom: op.nom || op.code, code: op.code, place: apercu.place, enveloppe: apercu.enveloppe, classe: apercu.classe,
           quantite: L.apres.quantite, prixRevient: L.apres.prixRevient, cours: op.prix, dateCours: op.date,
         }));
       } else {

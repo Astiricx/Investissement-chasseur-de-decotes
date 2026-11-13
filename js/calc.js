@@ -10,7 +10,8 @@
     seuilVentePotentiel: 0.20,   // vendre si le potentiel restant passe sous 20 %
     seuilRenforcement: -0.20,    // envisager de renforcer à −20 % depuis l'achat
     tailleMaxLigne: 0.05,        // une ligne ne dépasse pas 5 % du portefeuille
-    cashCible: 0.15,             // 15 % de liquidités
+    cashCible: 0.15,             // 15 % de liquidités (haut de la zone visée)
+    cashMin: 0.05,               // la méthode préconise de garder entre 5 % et 15 % de cash
     solvabiliteMin: 0.40,        // solvabilité maison minimale
     caMinPctVann: 0.05,          // chiffre d'affaires minimal, en % de la VANN
     immeublesRetenus: 0.80,      // 80 % du prix d'achat historique des immeubles
@@ -23,7 +24,11 @@
     VENDRE: "VENDRE",
     RENFORCER: "RENFORCER ?",
     GARDER: "GARDER",
+    SUIVI: "SUIVI",              // ETF, or, matières premières : pas de règle d'achat ou de vente, simple suivi
   });
+
+  /** Une ligne sans classe est une action décotée (format des versions précédentes). */
+  const estDecote = (l) => !l.classe || l.classe === "decote";
 
   const estNombre = (v) => typeof v === "number" && Number.isFinite(v);
   const n = (v) => (estNombre(v) ? v : 0);
@@ -100,6 +105,9 @@
   function statutLigne(ligne, params) {
     const p = Object.assign({}, PARAMETRES, params);
     const { quantite, prixRevient, cours, objectif, solvabilite, bilanSolide } = ligne;
+    if (!estDecote(ligne)) {
+      return [quantite, prixRevient, cours].every((v) => estNombre(v) && v > 0) ? STATUTS.SUIVI : STATUTS.A_COMPLETER;
+    }
     if (![quantite, prixRevient, cours, objectif].every((v) => estNombre(v) && v > 0)) return STATUTS.A_COMPLETER;
     // Bilan dégradé : on réexamine le dossier avant toute autre décision.
     const solvabiliteFaible = estNombre(solvabilite) && solvabilite < p.solvabiliteMin;
@@ -127,19 +135,29 @@
         const d = new Date(l.dateResultats + "T00:00:00").getTime();
         if (!Number.isNaN(d)) joursAvantResultats = Math.round((d - debut) / jour);
       }
+      const pvConnue = estNombre(l.quantite) && estNombre(l.cours) && l.prixRevient > 0;
       return {
-        ligne: l, valeur, poids,
+        ligne: l, valeur, poids, classe: estDecote(l) ? "decote" : l.classe,
         statut: statutLigne(l, p),
         performance: diviser(n(l.cours) - n(l.prixRevient), l.prixRevient),
+        pvLatente: pvConnue ? (l.cours - l.prixRevient) * l.quantite : null,
         potentiel: estNombre(l.objectif) && l.cours > 0 ? l.objectif / l.cours - 1 : null,
-        tropLourde: poids !== null && poids > p.tailleMaxLigne,
+        // Le seuil de concentration vise les actions individuelles, pas les ETF ni l'or.
+        tropLourde: estDecote(l) && poids !== null && poids > p.tailleMaxLigne,
         resultatsProches: joursAvantResultats !== null && joursAvantResultats >= 0 && joursAvantResultats <= p.joursAlerteResultats,
         joursAvantResultats,
       };
     });
+    const parClasse = { decote: 0, etf: 0, or: 0 };
+    for (const d of detail) parClasse[d.classe] = (parClasse[d.classe] || 0) + d.valeur;
+    const partCash = total > 0 ? n(cash) / total : null;
+    const pvConnues = detail.filter((d) => d.pvLatente !== null);
     return {
-      detail, valeurTitres, cash: n(cash), total,
-      partCash: total > 0 ? n(cash) / total : null,
+      detail, valeurTitres, cash: n(cash), total, parClasse,
+      pvLatente: pvConnues.reduce((t, d) => t + d.pvLatente, 0),
+      investi: pvConnues.reduce((t, d) => t + d.ligne.quantite * d.ligne.prixRevient, 0),
+      partCash,
+      zoneCash: partCash === null ? null : partCash < p.cashMin - EPS ? "bas" : partCash > p.cashCible + EPS ? "haut" : "ok",
       compte: (statut) => detail.filter((d) => d.statut === statut).length,
       lignesTropLourdes: detail.filter((d) => d.tropLourde).length,
       resultatsProches: detail.filter((d) => d.resultatsProches).length,
@@ -156,7 +174,7 @@
     decoteStocks: 0.20, decoteCreances: 0,
   });
 
-  const api = { PARAMETRES, STATUTS, ALPHA_INDUSTRIE, analyser, statutLigne, synthese };
+  const api = { PARAMETRES, STATUTS, ALPHA_INDUSTRIE, analyser, statutLigne, synthese, estDecote };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else racine.Decotes = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

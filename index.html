@@ -74,6 +74,16 @@
   <section id="vue-tableau" class="vue">
     <p class="bandeau" id="bandeau" hidden></p>
     <div class="indicateurs" id="indicateurs"></div>
+    <div class="grille-graphiques">
+      <div class="bloc">
+        <div class="bloc-titre"><h2>Répartition</h2><p class="note" id="repartition-note"></p></div>
+        <div id="graphe-repartition"></div>
+      </div>
+      <div class="bloc">
+        <div class="bloc-titre"><h2>Évolution de la valeur totale</h2><p class="note" id="evolution-note"></p></div>
+        <div id="graphe-evolution"></div>
+      </div>
+    </div>
     <div class="bloc rapport" id="rapport-cours" hidden>
       <div class="bloc-titre">
         <h2>Actualisation des cours</h2>
@@ -85,7 +95,7 @@
     <div class="bloc">
       <div class="bloc-titre">
         <div>
-          <h2>Portefeuille</h2>
+          <h2>Toutes les lignes</h2>
           <p class="note" id="resume-lignes"></p>
           <p class="note" id="etat-cours"></p>
         </div>
@@ -94,6 +104,7 @@
           <button type="button" class="bouton" id="ajouter-ligne">Ajouter une ligne</button>
         </div>
       </div>
+      <div class="puces-filtre" id="filtres-classe" role="group" aria-label="Filtrer par classe d'actif"></div>
       <p class="note" id="aucune-ligne" hidden>Aucune ligne pour l'instant. Ajoutez votre première action, ou importez vos lignes depuis l'onglet Données.</p>
       <div class="tableau-cadre">
         <table class="lignes" id="lignes">
@@ -101,8 +112,8 @@
             <tr>
               <th scope="col">Société</th>
               <th scope="col" class="num">Cours</th>
-              <th scope="col" class="num">Prix de revient</th>
-              <th scope="col" class="num">Performance</th>
+              <th scope="col" class="num">PRU</th>
+              <th scope="col" class="num">Plus-value latente</th>
               <th scope="col" class="num">Objectif</th>
               <th scope="col" class="num">Potentiel</th>
               <th scope="col" class="num">Poids</th>
@@ -114,6 +125,24 @@
         </table>
       </div>
     </div>
+    <div class="bloc">
+      <div class="bloc-titre">
+        <div>
+          <h2>Simulateur d'intérêts composés</h2>
+          <p class="note">Projection théorique à rendement constant : ce n'est pas une prévision.</p>
+        </div>
+      </div>
+      <form id="f-simulation" class="simulation" autocomplete="off" novalidate>
+        <div class="champ large"><label for="sim-capital">Capital de départ (€)</label><input id="sim-capital" type="text" inputmode="decimal"></div>
+        <div class="champ large"><label for="sim-versement">Versement mensuel (€)</label><input id="sim-versement" type="text" inputmode="decimal" value="0"></div>
+        <div class="champ large"><label for="sim-taux">Rendement annuel : <output id="sim-taux-valeur" for="sim-taux"></output></label><input id="sim-taux" type="range" min="0" max="20" step="0.5" value="10"></div>
+        <div class="champ large"><label for="sim-duree">Durée</label>
+          <select id="sim-duree"><option value="10">10 ans</option><option value="15">15 ans</option><option value="20" selected>20 ans</option><option value="25">25 ans</option><option value="30">30 ans</option></select></div>
+      </form>
+      <p class="resume-simulation" id="sim-resume" aria-live="polite"></p>
+      <div id="graphe-simulation"></div>
+    </div>
+
     <details class="bloc repli">
       <summary><h2>Règles appliquées</h2></summary>
       <dl class="regles" id="regles"></dl>
@@ -123,9 +152,27 @@
   <!-- ============ Analyse société ============ -->
   <section id="vue-analyse" class="vue" hidden>
     <div class="bloc-titre">
-      <h2>Analyse d'une société avant achat</h2>
-      <p class="note">Montants en millions d'euros, cours en euros. Prérempli avec le cas d'école Alpha Industrie (fictif).</p>
+      <h2>Analyse d'une société</h2>
+      <p class="note" id="outil-note"></p>
     </div>
+    <nav class="sous-onglets" id="sous-onglets" aria-label="Méthodes d'analyse">
+      <button type="button" data-outil="vann" aria-current="page">VANN / VANE</button>
+      <button type="button" data-outil="rapp">RAPP</button>
+      <button type="button" data-outil="holding">Holding</button>
+      <button type="button" data-outil="mine">Mine</button>
+    </nav>
+    <div class="bloc fiches">
+      <div class="champ large"><label for="fiche-liste">Fiches enregistrées</label><select id="fiche-liste"></select></div>
+      <div class="actions">
+        <button type="button" class="bouton principal" id="fiche-enregistrer">Enregistrer la fiche</button>
+        <button type="button" class="bouton" id="fiche-exemple">Charger l'exemple</button>
+        <button type="button" class="bouton" id="fiche-vider">Vider</button>
+        <button type="button" class="bouton danger" id="fiche-supprimer">Supprimer la fiche</button>
+      </div>
+      <p class="note" id="fiche-etat" aria-live="polite"></p>
+    </div>
+
+    <div class="outil" id="outil-vann">
     <div class="analyse">
       <form id="formulaire" class="bloc saisie" autocomplete="off" novalidate></form>
       <div class="resultats">
@@ -135,8 +182,36 @@
         <p class="note">Reste à vérifier à la main : flux de trésorerie, quatre ratios de la direction sur huit ans, raison de la décote.</p>
         <div class="actions">
           <button type="button" class="bouton principal" id="vers-portefeuille">Ajouter au portefeuille</button>
-          <button type="button" class="bouton" id="reinitialiser">Recharger Alpha Industrie</button>
-          <button type="button" class="bouton" id="vider">Vider le formulaire</button>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <div class="outil" id="outil-rapp" hidden>
+      <form id="f-rapp" class="bloc" autocomplete="off" novalidate></form>
+      <div class="bloc verdict" id="rapp-synthese" aria-live="polite"></div>
+      <div class="grille-ratios" id="rapp-ratios"></div>
+      <p class="avertissement">La formule de valorisation RAPP est tenue secrète par Les Daubasses. Ces quatre ratios publics servent à juger la direction et à filtrer, pas à fixer un prix : pour le prix, utilisez la VANN, la VANE ou la VANT. Les seuils « à surveiller » et « alerte » sont des choix de l'outil.</p>
+    </div>
+
+    <div class="outil" id="outil-holding" hidden>
+      <div class="analyse">
+        <form id="f-holding" class="bloc saisie" autocomplete="off" novalidate></form>
+        <div class="resultats">
+          <div class="bloc verdict" id="holding-verdict" aria-live="polite"></div>
+          <div class="bloc"><h3>Actif net réévalué</h3><dl class="valeurs" id="holding-valeurs"></dl></div>
+          <div class="bloc"><h3>Poids des participations</h3><div id="holding-parts"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="outil" id="outil-mine" hidden>
+      <div class="analyse">
+        <form id="f-mine" class="bloc saisie" autocomplete="off" novalidate></form>
+        <div class="resultats">
+          <div class="bloc verdict" id="mine-verdict" aria-live="polite"></div>
+          <div class="bloc"><h3>Du gisement à la valeur par action</h3><dl class="valeurs" id="mine-valeurs"></dl></div>
+          <p class="note" id="mine-precautions"></p>
         </div>
       </div>
     </div>
@@ -243,6 +318,7 @@
     <h2 id="ligne-titre"></h2>
     <div class="champ large"><label for="l-nom">Société</label><input id="l-nom" type="text" maxlength="120"></div>
     <div class="deux">
+      <div class="champ large"><label for="l-classe">Classe d'actif</label><select id="l-classe"></select></div>
       <div class="champ large"><label for="l-code">Code bourse</label><input id="l-code" type="text" maxlength="24" autocapitalize="characters" spellcheck="false"></div>
       <div class="champ large"><label for="l-place">Place de cotation</label><select id="l-place"></select></div>
       <div class="champ large"><label for="l-enveloppe">Enveloppe</label><select id="l-enveloppe"><option>PEA</option><option>CTO</option></select></div>
@@ -254,7 +330,7 @@
       <div class="champ large"><label for="l-solvabilite">Solvabilité maison (%)</label><input id="l-solvabilite" type="text" inputmode="decimal"></div>
       <div class="champ large"><label for="l-bilanSolide">Bilan toujours solide ?</label><select id="l-bilanSolide"><option value="">Non renseigné</option><option value="oui">Oui</option><option value="non">Non</option></select></div>
     </div>
-    <p class="note aide-code">Code bourse : le code court (ALPH) avec sa place de cotation, ou le code Yahoo complet (ALPH.PA).</p>
+    <p class="note aide-code">Code bourse : le code court (ALPH) avec sa place de cotation, ou le code Yahoo complet (ALPH.PA). Or : code GC=F, place « Autre », quantité en onces. Pour un ETF ou de l'or, l'objectif et la solvabilité sont facultatifs.</p>
     <div class="champ large"><label for="l-dateResultats">Prochaine publication de résultats</label><input id="l-dateResultats" type="date"></div>
     <div class="champ large"><label for="l-notes">Thèse et notes</label><textarea id="l-notes" rows="3" maxlength="2000"></textarea></div>
     <p class="message" id="ligne-message" role="alert" hidden></p>
@@ -287,6 +363,7 @@
         <div class="champ large"><label for="op-frais" id="op-frais-libelle">Frais (€)</label><input id="op-frais" type="text" inputmode="decimal"></div>
       </div>
       <div class="deux" id="op-nouvelle-ligne">
+        <div class="champ large"><label for="op-classe">Classe d'actif</label><select id="op-classe"></select></div>
         <div class="champ large"><label for="op-place">Place de cotation</label><select id="op-place"></select></div>
         <div class="champ large"><label for="op-enveloppe">Enveloppe</label><select id="op-enveloppe"><option>PEA</option><option>CTO</option></select></div>
       </div>
@@ -320,7 +397,11 @@
 <script src="js/csv.js"></script>
 <script src="js/reseau.js"></script>
 <script src="js/journal.js"></script>
+<script src="js/methodes.js"></script>
+<script src="js/graphiques.js"></script>
 <script src="js/tests.js"></script>
+<script src="js/vue-patrimoine.js"></script>
+<script src="js/vue-analyses.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

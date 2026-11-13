@@ -19,7 +19,8 @@
   class ErreurLimite extends Error {}       // trop de requêtes
   class ErreurDelai extends Error {}        // pas de réponse dans le délai
 
-  const SYMBOLE_VALIDE = /^[A-Z0-9][A-Z0-9.\-]{0,23}$/;
+  // Le signe « = » sert aux contrats et devises de Yahoo (GC=F pour l'or, EURUSD=X).
+  const SYMBOLE_VALIDE = /^[A-Z0-9][A-Z0-9.\-=]{0,23}$/;
 
   // ---------------------------------------------------------------- Yahoo Finance
   const SUFFIXES_YAHOO = {
@@ -33,7 +34,7 @@
       const code = String(ligne.code || "").toUpperCase().trim();
       if (!code) return null;
       // Un code qui contient déjà un point (ALPH.PA) est pris tel quel.
-      const symbole = code.includes(".") || ligne.place === "AUTRE" ? code : code + (SUFFIXES_YAHOO[ligne.place] ?? ".PA");
+      const symbole = code.includes(".") || code.includes("=") || ligne.place === "AUTRE" ? code : code + (SUFFIXES_YAHOO[ligne.place] ?? ".PA");
       return SYMBOLE_VALIDE.test(symbole) ? symbole : null;
     },
     symboleChange: (devise) => devise + "EUR=X",
