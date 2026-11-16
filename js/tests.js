@@ -10,6 +10,7 @@
   const Journal = sousNode ? require("./journal.js") : racine.DecotesJournal;
   const M = sousNode ? require("./methodes.js") : racine.DecotesMethodes;
   const Gerants = sousNode ? require("./gerants.js") : racine.DecotesGerants;
+  const Publiees = sousNode ? require("./analyses-publiees.js") : racine.DecotesAnalysesPubliees;
   const resultats = [];
   const arrondi = (v, d) => Math.round(v * 10 ** d) / 10 ** d;
   function verifier(nom, obtenu, attendu) {
@@ -307,6 +308,18 @@
   // 21. Momentum 12-1.
   verifier("Momentum : clôture du mois dernier ÷ il y a 12 mois − 1", arrondi(Reseau.momentum([100, 102, 104, 106, 108, 110, 112, 114, 116, 118, 120, 125, 130]), 2), 0.25);
   verifier("Momentum : historique trop court → inconnu", Reseau.momentum([100, 110]), null);
+
+  // 22. Analyses publiées : les fiches redonnent exactement les chiffres de la page de synthèse.
+  const showa = Publiees.find((x) => x.id === "3954-showa-paxxs");
+  const sv = D.analyser(showa.fiches.vann);
+  verifier("Showa Paxxs : VANN 2 312 ¥ par action (stocks décotés de 20 %)", Math.round(sv.vannParAction), 2312);
+  verifier("Showa Paxxs : VANE 4 291 ¥, VANT 6 440 ¥", JSON.stringify([Math.round(sv.vaneParAction), Math.round(sv.vantParAction)]), JSON.stringify([4291, 6440]));
+  verifier("Showa Paxxs : cours = 129,4 % de la VANN, 69,7 % de la VANE", JSON.stringify([arrondi(sv.coursSurVann, 3), arrondi(sv.coursSurVane, 3)]), JSON.stringify([1.294, 0.697]));
+  verifier("Showa Paxxs : prix maximal Net-Estate 3 004 ¥, verdict Net-Estate", JSON.stringify([Math.round(sv.prixMaxNetEstate), sv.verdict.code]), JSON.stringify([3004, "net-estate"]));
+  verifier("Showa Paxxs : solvabilité maison 100,2 %, potentiel +115 %", JSON.stringify([arrondi(sv.solvabilite, 3), arrondi(sv.potentiel, 3)]), JSON.stringify([1.002, 1.152]));
+  const sr = M.rapp(Array.from({ length: 8 }, (_, i) => Object.fromEntries(["annee", "actions", "chiffreAffaires", "fraisGeneraux", "coutVentes", "stocks", "fondsPropres", "dividende", "cours"].map((k) => [k, showa.fiches.rapp[`a${i}_${k}`]]))), showa.fiches.rapp.tsr);
+  verifier("Showa Paxxs : RAPP 3 ratios conformes, stocks à surveiller (décote suggérée)", JSON.stringify([sr.synthese.ok, sr.synthese.vigilance, sr.ratios[2].verdict, sr.ratios[2].decoteSuggeree]), JSON.stringify([3, 1, "vigilance", true]));
+  verifier("Showa Paxxs : création de valeur 8,9 %/an contre 8,3 %/an pour le cours", JSON.stringify([arrondi(sr.ratios[3].rendement, 3), arrondi(sr.ratios[3].hausseCours, 3)]), JSON.stringify([0.089, 0.083]));
 
   // 9. Coffre chiffré (itérations réduites pour que le test reste instantané).
   async function testsCoffre() {

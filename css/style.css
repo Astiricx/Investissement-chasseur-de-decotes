@@ -255,7 +255,8 @@ textarea { resize: vertical; }
 .sous-onglets { display: flex; gap: 4px; background: var(--gris-f); border-radius: 10px; padding: 4px; overflow-x: auto; }
 .sous-onglets button { flex: 1; font: inherit; font-size: .9rem; font-weight: 600; color: var(--encre2); background: none; border: 0; border-radius: 7px; padding: 8px 12px; min-height: 40px; cursor: pointer; white-space: nowrap; }
 .sous-onglets button[aria-current="page"] { background: var(--carte); color: var(--encre); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-.fiches { display: grid; grid-template-columns: minmax(180px, 280px) 1fr; gap: 8px 16px; align-items: end; }
+.fiches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; align-items: end; }
+.fiches .actions { grid-column: 1 / -1; }
 .fiches .champ { padding: 0; }
 .fiches .note { grid-column: 1 / -1; }
 .outil { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }

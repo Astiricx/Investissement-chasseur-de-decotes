@@ -32,6 +32,7 @@
     /** Lit tous les champs nommés d'un formulaire : nombres (pourcentages ramenés à 0-1), textes. */
     function lireFormulaire(form) {
       const valeurs = {};
+      for (const c of form.querySelectorAll("select[name]")) valeurs[c.name] = c.value;
       for (const c of form.querySelectorAll("input[name]")) {
         const type = c.dataset.type;
         if (type === "texte") { if (c.value.trim()) valeurs[c.name] = c.value.trim(); continue; }
@@ -41,6 +42,7 @@
       return valeurs;
     }
     function remplirFormulaire(form, valeurs) {
+      for (const c of form.querySelectorAll("select[name]")) c.value = valeurs && valeurs[c.name] ? valeurs[c.name] : c.options[0].value;
       for (const c of form.querySelectorAll("input[name]")) {
         const v = valeurs ? valeurs[c.name] : undefined;
         c.classList.remove("invalide");
@@ -68,8 +70,8 @@
       ["coutVentes", "Coût des ventes"],
       ["stocks", "Stocks"],
       ["fondsPropres", "Fonds propres part du groupe"],
-      ["dividende", "Dividende par action (€)"],
-      ["cours", "Cours de fin d'exercice (€, facultatif)"],
+      ["dividende", "Dividende par action"],
+      ["cours", "Cours de fin d'exercice (facultatif)"],
     ];
     function construireRapp() {
       prefixe = "rapp";
@@ -78,8 +80,10 @@
       const lignes = LIGNES_RAPP.map(([cle, libelle]) => el("tr", {}, [el("th", { scope: "row", texte: libelle })].concat(Array.from({ length: NB_ANNEES }, (_, i) =>
         el("td", {}, el("input", { name: `a${i}_${cle}`, "data-type": "nombre", type: "text", inputmode: "decimal", "aria-label": `${libelle}, exercice ${i + 1}` }))))));
       $("f-rapp").replaceChildren(
-        el("div", { class: "rapp-entete" }, [champ("nom", "Société", "texte"), champ("tsr", "Taux sans risque (%)", "pourcent", "Par exemple le rendement de l'OAT à 10 ans.")]),
-        el("p", { class: "note", texte: "Huit exercices, du plus ancien au plus récent. Montants en millions, sauf le dividende et le cours (par action)." }),
+        el("div", { class: "rapp-entete" }, [champ("nom", "Société", "texte"), champ("tsr", "Taux sans risque (%)", "pourcent", "Taux à 10 ans du pays de cotation (OAT en France, JGB au Japon).")]),
+        el("div", { class: "champ" }, [el("label", { for: "a-rapp-devise", texte: "Devise des comptes" }),
+          el("select", { id: "a-rapp-devise", name: "devise" }, ctx.DEVISES.map((d) => el("option", { value: d, texte: d })))]),
+        el("p", { class: "note", texte: "Huit exercices, du plus ancien au plus récent. Montants en millions, sauf le dividende et le cours (par action), dans la devise des comptes." }),
         el("div", { class: "rapp-cadre" }, el("table", { class: "rapp-table" }, [el("thead", {}, entete), el("tbody", {}, lignes)])),
       );
     }
@@ -97,20 +101,22 @@
         evalues === 0 ? "Saisissez au moins deux exercices pour évaluer les ratios."
           : `${sy.ok} ratio${sy.ok > 1 ? "s" : ""} conforme${sy.ok > 1 ? "s" : ""} sur ${evalues} évalué${evalues > 1 ? "s" : ""}` +
             (sy.vigilance ? ` · ${sy.vigilance} à surveiller` : "") + (sy.alerte ? ` · ${sy.alerte} en alerte` : "") + ` (${r.exercices} exercice${r.exercices > 1 ? "s" : ""} saisi${r.exercices > 1 ? "s" : ""}).`);
-      $("rapp-ratios").replaceChildren(...r.ratios.map(carteRatio));
+      const symbole = ctx.formatsDevise(v.devise).symbole;
+      $("rapp-ratios").replaceChildren(...r.ratios.map((x) => carteRatio(x, symbole)));
     }
-    function chiffresRatio(x) {
+    function chiffresRatio(x, symbole) {
+      symbole = symbole || "€";
       const periode = x.serie.length >= 2 ? `${x.serie[0].annee} → ${x.serie[x.serie.length - 1].annee}` : "";
       if (x.verdict === "incomplet" || x.verdict === "na") return null;
       if (x.cle === "actions") return [`${f(fNb2, x.debut)} → ${f(fNb2, x.fin)} M`, `${periode} · ${signe(x.variation)}`];
       if (x.cle === "frais") return [`${f(fPct1, x.debut)} → ${f(fPct1, x.fin)}`, `${periode} · moyenne des années précédentes ${f(fPct1, x.reference)}`];
       if (x.cle === "stocks") return [`${f(fNb0, x.debut)} → ${f(fNb0, x.fin)} jours`, `${periode} · ${signe(x.variation)} vs moyenne précédente`];
-      return [`${f(fNb2, x.creation, " €")} créés par action`,
-        `(${f(fNb2, x.fin)} − ${f(fNb2, x.debut)}) + ${f(fNb2, x.dividendes)} € de dividendes en ${x.annees} ans · ${signe(x.rendement)} par an, taux sans risque ${f(fPct1, x.tauxSansRisque)}` +
+      return [`${f(fNb2, x.creation, " " + symbole)} créés par action`,
+        `(${f(fNb2, x.fin)} − ${f(fNb2, x.debut)}) + ${f(fNb2, x.dividendes)} ${symbole} de dividendes en ${x.annees} ans · ${signe(x.rendement)} par an, taux sans risque ${f(fPct1, x.tauxSansRisque)}` +
         (x.hausseCours !== null ? `, cours ${signe(x.hausseCours)} par an` : "")];
     }
-    function carteRatio(x) {
-      const chiffres = chiffresRatio(x);
+    function carteRatio(x, symbole) {
+      const chiffres = chiffresRatio(x, symbole);
       const enfants = [
         el("div", { class: "ratio-tete" }, [el("h3", { texte: x.titre }), badge(x.verdict)]),
         chiffres ? el("div", { class: "ratio-corps" }, [
@@ -261,7 +267,7 @@
 
     // ---------------------------------------------------------------- Outils et fiches
     const OUTILS = {
-      vann: { note: "VANN, VANE et VANT à partir du bilan. Montants en millions d'euros, cours en euros.",
+      vann: { note: "VANN, VANE et VANT à partir du bilan. Montants en millions et cours par action, dans la devise des comptes.",
         lire: () => ctx.vann.lire(), remplir: (v) => ctx.vann.remplir(v), exemple: () => ctx.vann.exemple, videParDefaut: () => null },
       rapp: { note: "Les quatre ratios publics de la RAPP sur huit exercices : jugent la direction, pas le prix.",
         lire: () => lireFormulaire($("f-rapp")), remplir: (v) => { remplirFormulaire($("f-rapp"), v); calculerRapp(); }, exemple: () => aplatirRapp(M.EXEMPLE_RAPP), videParDefaut: rappVide },
@@ -331,6 +337,8 @@
         if (fiche) { OUTILS[outilActif].remplir(fiche.valeurs); $("fiche-etat").textContent = `Fiche « ${fiche.nom} » chargée.`; }
       });
       $("fiche-enregistrer").addEventListener("click", enregistrerFiche);
+      afficherPubliees();
+      $("publiee-liste").addEventListener("change", () => { chargerPubliee($("publiee-liste").value); $("publiee-liste").value = ""; });
       $("fiche-supprimer").addEventListener("click", supprimerFiche);
       $("fiche-exemple").addEventListener("click", () => { OUTILS[outilActif].remplir(OUTILS[outilActif].exemple()); afficherFiches(); $("fiche-etat").textContent = "Exemple fictif chargé."; });
       $("fiche-vider").addEventListener("click", () => { OUTILS[outilActif].remplir(OUTILS[outilActif].videParDefaut()); afficherFiches(); $("fiche-etat").textContent = ""; });
@@ -341,6 +349,22 @@
     function reinitialiser() {
       for (const o of Object.values(OUTILS)) o.remplir(o.exemple());
       afficherOutil("vann");
+    }
+
+    // ---------------------------------------------------------------- Analyses publiées
+    const PUBLIEES = racine.DecotesAnalysesPubliees || [];
+    const fDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+    function afficherPubliees() {
+      $("publiee-liste").replaceChildren(el("option", { value: "", texte: PUBLIEES.length ? "Choisir une analyse" : "Aucune analyse publiée" }),
+        ...PUBLIEES.map((p) => el("option", { value: p.id, texte: `${p.societe} (${p.code}) · ${fDate.format(new Date(p.date + "T00:00:00"))}` })));
+    }
+    /** Charge une analyse publiée dans les outils concernés ; l'utilisateur peut ensuite l'enregistrer dans son coffre. */
+    function chargerPubliee(id) {
+      const p = PUBLIEES.find((x) => x.id === id); if (!p) return;
+      for (const [outil, valeurs] of Object.entries(p.fiches)) if (OUTILS[outil]) OUTILS[outil].remplir(valeurs);
+      afficherOutil(Object.keys(p.fiches)[0]);
+      const lien = el("a", { href: p.page, texte: "lire la synthèse complète" });
+      $("fiche-etat").replaceChildren(document.createTextNode(`Analyse publiée chargée : ${p.resume} Outils remplis : ${Object.keys(p.fiches).map((o) => o.toUpperCase()).join(", ")}. `), lien, document.createTextNode(". « Enregistrer la fiche » la copie dans votre coffre."));
     }
 
     /** Ouvre l'outil VANN / VANE sur une société (formulaire vidé, nom prérempli). */

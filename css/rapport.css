@@ -1,0 +1,39 @@
+/* Pages de synthèse des analyses publiées (dossier analyses/). Complète style.css. */
+.rapport-page main { max-width: 920px; }
+.rapport-page h1 { font-size: 1.6rem; line-height: 1.25; margin: 0 0 4px; }
+.rapport-page h2 { font-size: 1.2rem; margin: 0 0 10px; }
+.rapport-page section.bloc { display: grid; gap: 10px; }
+.rapport-page p { line-height: 1.55; }
+.rapport-page ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; line-height: 1.5; }
+.retour { margin-left: auto; flex: none; color: #fff; font-weight: 600; font-size: .9rem; text-decoration: none; border: 1px solid rgba(255,255,255,.3); border-radius: 8px; padding: 6px 12px; }
+.retour:hover { background: rgba(255,255,255,.1); }
+.sous-titre { color: var(--encre2); }
+.tuiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.calcul { font-variant-numeric: tabular-nums; background: var(--gris-f); border-radius: 8px; padding: 10px 12px; font-size: .92rem; line-height: 1.6; overflow-wrap: anywhere; }
+.calcul strong { font-weight: 700; }
+.echelle { width: 100%; height: auto; display: block; }
+.echelle-etroite { display: none; }
+.echelle-etroite .etiquette { font-size: 13px; }
+.echelle-etroite .valeur, .echelle-etroite .graduation { font-size: 12px; }
+.rapport-page .table-simple td.num, .rapport-page .table-simple th.num { white-space: nowrap; }
+.echelle .axe { stroke: var(--v-axe); stroke-width: 2; }
+.echelle .zone-achat { fill: var(--vert-f); }
+.echelle .graduation { fill: var(--v-muet); font-size: 11px; }
+.echelle .repere { stroke: var(--encre2); stroke-width: 1.5; }
+.echelle .repere.cours { stroke: var(--accent); stroke-width: 3; }
+.echelle .etiquette { fill: var(--encre); font-size: 12px; font-weight: 600; }
+.echelle .etiquette.cours { fill: var(--accent); }
+.echelle .valeur { fill: var(--encre2); font-size: 11px; }
+.table-simple td.ok { color: var(--vert); font-weight: 700; }
+.table-simple td.ko { color: var(--rouge); font-weight: 700; }
+.table-simple td.vg { color: var(--jaune); font-weight: 700; }
+.table-simple tr.total td { font-weight: 700; border-top: 2px solid var(--trait); }
+.sources li { overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .tuiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rapport-page h1 { font-size: 1.35rem; }
+}
+@media (max-width: 560px) {
+  .echelle-large { display: none; }
+  .echelle-etroite { display: block; }
+}

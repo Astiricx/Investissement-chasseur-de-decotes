@@ -927,7 +927,8 @@
   const CHAMPS = [
     ["La société", [
       ["nom", "Nom", "texte"],
-      ["cours", "Cours actuel (€)"],
+      ["devise", "Devise des comptes", "devise", "Montants en millions et cours par action, dans cette devise."],
+      ["cours", "Cours actuel"],
       ["nbActions", "Nombre d'actions (millions)"],
       ["chiffreAffaires", "Chiffre d'affaires"],
     ]],
@@ -952,6 +953,17 @@
     ]],
   ];
   const TYPES = Object.fromEntries(CHAMPS.flatMap(([, cs]) => cs.map(([cle, , type]) => [cle, type || "nombre"])));
+  const DEVISES = ["EUR", "JPY", "USD", "GBP", "CHF", "NOK", "SEK", "DKK", "CAD", "AUD", "HKD"];
+  // Symboles affichés : courts quand ils sont sans ambiguïté (€, ¥, £), sinon l'abréviation française ($US, CHF…).
+  const SYMBOLES = { EUR: "€", JPY: "¥", GBP: "£", USD: "$US", CAD: "$CA", AUD: "$AU", HKD: "$HK", CHF: "CHF", NOK: "NOK", SEK: "SEK", DKK: "DKK" };
+  /** Formats d'une devise : montant par action (f), symbole, et suffixe des montants en millions (« M€ », « M¥ », « M CHF »). */
+  function formatsDevise(devise) {
+    const code = DEVISES.includes(devise) ? devise : "EUR", symbole = SYMBOLES[code];
+    const base = new Intl.NumberFormat("fr-FR", { style: "currency", currency: code }); // garde les décimales usuelles (0 pour le yen)
+    const parties = (x) => base.formatToParts(x).map((p) => (p.type === "currency" ? { type: p.type, value: symbole } : p));
+    const f = { format: (x) => parties(x).map((p) => p.value).join(""), formatToParts: parties };
+    return { code, f, symbole, millions: symbole.length === 1 ? " M" + symbole : " M " + symbole };
+  }
   let analyse = { societe: {}, resultat: null, complet: false };
 
   function construireFormulaire() {
@@ -959,7 +971,9 @@
       el("fieldset", {}, [el("legend", { texte: titre })].concat(champs.map(([cle, libelle, type, aide]) =>
         el("div", { class: "champ" + (type === "texte" ? " large" : "") }, [
           el("label", { for: "c-" + cle, texte: libelle }),
-          el("input", { id: "c-" + cle, name: cle, type: "text", inputmode: type === "texte" ? null : "decimal" }),
+          type === "devise"
+            ? el("select", { id: "c-" + cle, name: cle }, DEVISES.map((d) => el("option", { value: d, texte: d })))
+            : el("input", { id: "c-" + cle, name: cle, type: "text", inputmode: type === "texte" ? null : "decimal" }),
           aide ? el("small", { texte: aide }) : null,
         ]))))));
   }
@@ -967,6 +981,7 @@
   function remplir(societe) {
     for (const [cle, type] of Object.entries(TYPES)) {
       const v = societe ? societe[cle] : null;
+      if (type === "devise") { $("c-" + cle).value = DEVISES.includes(v) ? v : "EUR"; continue; }
       $("c-" + cle).value = v === null || v === undefined ? "" : type === "texte" ? v : versChamp(type === "pourcent" ? v * 100 : v);
     }
     calculer();
@@ -976,7 +991,7 @@
     const s = {};
     for (const [cle, type] of Object.entries(TYPES)) {
       const champ = $("c-" + cle);
-      if (type === "texte") { s[cle] = champ.value.trim(); continue; }
+      if (type === "texte" || type === "devise") { s[cle] = champ.value.trim(); continue; }
       const v = lireChamp(champ);
       s[cle] = Number.isNaN(v) || v === null ? null : type === "pourcent" ? v / 100 : v;
     }
@@ -993,7 +1008,9 @@
 
     const ligne = (t, val, fort) => [el("dt", { class: fort ? "fort" : null, texte: t }), el("dd", { class: fort ? "fort" : null, texte: val })];
     const sep = () => el("div", { class: "sep" });
-    const M = (x) => (estNombre(x) ? fNb.format(x) + " M€" : vide);
+    const dev = formatsDevise(s.devise);
+    const fEur = dev.f; // dans cette calculatrice, les montants sont dans la devise des comptes
+    const M = (x) => (estNombre(x) ? fNb.format(x) + dev.millions : vide);
     $("valeurs").replaceChildren(
       ...ligne("Capitalisation boursière", M(r.capitalisation)),
       ...ligne("Fonds de roulement net", M(r.fondsDeRoulementNet)),
@@ -1030,11 +1047,15 @@
     const nom = (analyse.societe.nom || "").replace(/\s*\(exemple fictif\)\s*$/i, "");
     afficherVue("journal");
     ouvrirOperation();
-    $("op-nom").value = nom; $("op-prix").value = versChamp(analyse.societe.cours);
-    etat.operationPreremplie = { objectif: r.vantParAction > 0 ? arrondi(r.vantParAction) : null, solvabilite: estNombre(r.solvabilite) ? Math.round(r.solvabilite * 1000) / 1000 : null };
-    const resume = [`VANN ${fmt(fEur, r.vannParAction)}`, `VANE ${fmt(fEur, r.vaneParAction)}`, `VANT ${fmt(fEur, r.vantParAction)}`,
-      `prix maximal ${fmt(fEur, r.verdict.code === "net-net" ? r.prixMaxNetNet : r.prixMaxNetEstate)}`, `solvabilité ${fmt(fPct, r.solvabilite)}`, r.verdict.texte].join(" · ");
-    $("op-these-analyse").textContent = "Votre analyse : " + resume;
+    // Le portefeuille et le journal sont en euros : pour une société cotée dans une autre devise,
+    // le prix payé et l'objectif doivent être convertis à la main au cours du jour.
+    const dev = formatsDevise(analyse.societe.devise), enEuros = dev.code === "EUR";
+    $("op-nom").value = nom; if (enEuros) $("op-prix").value = versChamp(analyse.societe.cours);
+    etat.operationPreremplie = { objectif: enEuros && r.vantParAction > 0 ? arrondi(r.vantParAction) : null, solvabilite: estNombre(r.solvabilite) ? Math.round(r.solvabilite * 1000) / 1000 : null };
+    const resume = [`VANN ${fmt(dev.f, r.vannParAction)}`, `VANE ${fmt(dev.f, r.vaneParAction)}`, `VANT ${fmt(dev.f, r.vantParAction)}`,
+      `prix maximal ${fmt(dev.f, r.verdict.code === "net-net" ? r.prixMaxNetNet : r.prixMaxNetEstate)}`, `solvabilité ${fmt(fPct, r.solvabilite)}`, r.verdict.texte].join(" · ");
+    $("op-these-analyse").textContent = "Votre analyse : " + resume + (enEuros ? "" :
+      ` — Montants en ${dev.code} : saisissez le prix payé en euros, puis l'objectif de vente converti en euros dans la fiche de la ligne.`);
     $("op-these-analyse").hidden = false;
     ajusterOperation();
   });
@@ -1088,7 +1109,7 @@
 
   // ================= Démarrage =================
   const ctx = {
-    $, el, G: Graphiques, M: Methodes, Donnees, P, etat, enregistrer, lireChamp, versChamp, estNombre, fEur, fEur0, fPct, fPct0,
+    $, el, G: Graphiques, M: Methodes, Donnees, P, etat, enregistrer, lireChamp, versChamp, estNombre, fEur, fEur0, fPct, fPct0, DEVISES, formatsDevise,
     vann: { lire: () => Object.assign({}, analyse.societe), remplir: (v) => remplir(v), exemple: D.ALPHA_INDUSTRIE },
     message, analyserSociete: (nom) => { afficherVue("analyse"); analyses.analyserSociete(nom); },
   };

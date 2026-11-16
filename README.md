@@ -6,7 +6,7 @@ Suivi de portefeuille boursier selon la méthode Net-Net / Daubasses. Outil pers
 
 - HTML, CSS et JavaScript simples, sans bibliothèque extérieure ni étape de compilation.
 - La page ne contacte aucun autre site (politique de sécurité dans `index.html`).
-- Ce dépôt est public : il ne contient que du code et des sociétés fictives. Le fichier `.gitignore` refuse les fichiers de données (.json, .xlsx, .csv).
+- Ce dépôt est public : il ne contient que du code, des sociétés fictives et des analyses de sociétés cotées faites à partir de leurs comptes publiés. Aucune donnée personnelle (portefeuille, montants, transactions) : le fichier `.gitignore` refuse les fichiers de données (.json, .xlsx, .csv).
 
 ## Fichiers
 
@@ -24,6 +24,8 @@ Suivi de portefeuille boursier selon la méthode Net-Net / Daubasses. Outil pers
 - `js/vue-analyses.js` : sous-onglets d'analyse (VANN/VANE, RAPP, holding, mine, qualité Buffett) et fiches enregistrées.
 - `js/gerants.js` et `js/vue-gerants.js` : suivi « Smart Money » des mouvements des gérants (agrégation par société et par thème, import CSV).
 - `js/vue-assurance.js` : simulateur d'assurance anti-krach (puts hors de la monnaie, Black-Scholes, comparaison sur 10 ans).
+- `js/analyses-publiees.js` : les fiches des analyses publiées (chiffres des comptes), chargeables dans les outils.
+- `analyses/` et `css/rapport.css` : une page de synthèse par analyse publiée, générée par un script de `outils/` (`node outils/analyse-3954-showa-paxxs.js`) qui réutilise les modules de calcul.
 - `js/tests.js` : les tests, exécutés à chaque chargement de la page.
 - `js/app.js` : l'interface.
 
@@ -46,6 +48,13 @@ Ouvrir `index.html` dans un navigateur. Pour lancer les tests seuls : `node js/t
 - Si Yahoo refuse les requêtes venant d'une page web (règle CORS des navigateurs), l'outil le signale et garde les anciens cours. Le relais corsproxy.io peut alors être activé (onglet Données) ; il voit la liste des codes demandés.
 - Ajouter un fournisseur (par exemple EODHD) : un objet dans `FOURNISSEURS` de `js/reseau.js` (voir l'en-tête du fichier) et son domaine dans `connect-src` de `index.html`.
 
+## Analyses publiées
+
+- Onglet Analyse, liste « Analyses publiées » : la fiche remplit les outils concernés (VANN / VANE, RAPP) ; « Enregistrer la fiche » la copie dans le coffre.
+- Les montants restent dans la devise des comptes de la société (liste « Devise des comptes »). Le portefeuille et le journal restent en euros : pour une société étrangère, le prix payé et l'objectif sont à convertir au cours du jour.
+- Chaque page de synthèse (`analyses/…`) détaille les sources, les calculs pas à pas, la sensibilité et le plan d'action. Les tests vérifient que la fiche redonne exactement les chiffres de la page.
+- [Showa Paxxs (3954, Tokyo)](analyses/3954-showa-paxxs.html), 16 novembre 2026 : Net-Estate à la limite (69,7 % de la VANE), pas un Net-Net.
+
 ## État
 
 - Itération 1 : tableau de bord et calculatrice d'analyse.
@@ -53,6 +62,7 @@ Ouvrir `index.html` dans un navigateur. Pour lancer les tests seuls : `node js/t
 - Itération 3 : actualisation des cours (Yahoo Finance, conversion en euros, rapport détaillé), journal des opérations avec mise à jour proposée de la ligne et du cash, place de cotation.
 - Itération 4 : classes d'actifs (actions décotées, ETF, or et matières premières), répartition, jauge du cash 5-15 %, courbe d'évolution (un point par jour), plus-value latente, simulateur d'intérêts composés ; analyses RAPP, holding et mine avec fiches enregistrées dans le coffre.
 - Itération 5 : carnet de bord (thèse obligatoire avant tout achat, raison de vente, notes de suivi, rotation sur 12 mois), radar de l'« action idéale » (critères Buffett, exemple Apple 10-K 2025), suivi des gérants, assurance anti-krach, momentum 12-1 activable seulement après acceptation explicite.
+- Première analyse publiée (Showa Paxxs) et devise des comptes dans les outils VANN / VANE et RAPP.
 - À venir : installation sur téléphone (application web hors connexion).
 
 ## Sources des chiffres cités dans l'interface
