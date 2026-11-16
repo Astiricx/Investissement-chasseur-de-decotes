@@ -102,7 +102,7 @@ const html = `<!doctype html>
   <div class="vue">
   <div>
     <h1>Showa Paxxs (3954, Bourse de Tokyo)</h1>
-    <p class="sous-titre">Analyse selon la méthode des Daubasses · 16 novembre 2026 · cours de clôture du jour : ${yen(v.cours)} · bilan au 30 septembre 2026</p>
+    <p class="sous-titre">Analyse selon la méthode des Daubasses · 16 novembre 2026 · cours de clôture du 16 novembre : ${yen(v.cours)} (vérifié sur Kabutan ; veille : 3 020 ¥) · bilan au 30 septembre 2026</p>
   </div>
 
   <div class="bloc verdict v-achat">
@@ -131,7 +131,7 @@ const html = `<!doctype html>
       <li><strong>Net-Estate de justesse :</strong> avec 10 861 M¥ d'immobilier au prix d'achat historique (terrains 970 M¥ et bâtiments 9 891 M¥ bruts), le cours tombe à ${pct(r.coursSurVane)} de la VANE. Avec une décote de 50 % sur les stocks, ou sans les bâtiments, le titre ne passe plus.</li>
       <li><strong>Bilan très solide :</strong> solvabilité maison de ${pct(r.solvabilite)}, 10 293 M¥ de trésorerie pour 1 185 M¥ d'emprunts.</li>
       <li><strong>Direction (RAPP) :</strong> ${rapp.synthese.ok} ratios conformes sur 4${coeur.verdict !== "ok" ? `, ${rapp.synthese.ok - 1} en version prudente (sans les plus-values latentes sur titres)` : ""}. Les stocks tournent plus lentement depuis 2024 : c'est le point à surveiller.</li>
-      <li><strong>En pratique :</strong> un lot de 100 actions coûte environ ${nb(lot)} ¥, soit environ ${nb(lot / eurJpy)} € (1 € ≈ ${nb(eurJpy, 1)} ¥). Le titre s'échange très peu (quelques centaines d'actions par jour) et n'est pas éligible au PEA.</li>
+      <li><strong>En pratique :</strong> un lot de 100 actions coûte environ ${nb(lot)} ¥, soit environ ${nb(lot / eurJpy)} € (1 € ≈ ${nb(eurJpy, 1)} ¥). Le titre s'échange très peu : 400 actions le 16 novembre (environ 1,2 M¥), toutes à l'ouverture. Il n'est pas éligible au PEA.</li>
     </ul>
   </section>
 
@@ -227,7 +227,8 @@ const html = `<!doctype html>
     <h2>7. Un plan mécanique, si vous décidez d'acheter</h2>
     <ul>
       <li>N'acheter qu'à ${yen(r.prixMaxNetEstate)} ou moins, avec un ordre à cours limité, sur un compte-titres : le titre n'est pas éligible au PEA.</li>
-      <li>Taille de ligne : un lot de 100 actions (environ ${nb(lot / eurJpy)} €) représente environ ${nb(lot / eurJpy / 10000 * 100, 0)} % d'un portefeuille de 10 000 €, bien au-delà de la règle des 5 %. Il faudrait un portefeuille d'environ ${nb(Math.ceil(lot / eurJpy / 0.05 / 1000) * 1000)} € pour la respecter, ou écrire une exception assumée dans le carnet de bord.</li>
+      <li>Taille de ligne : 5 % du portefeuille au plus, par lots de 100 actions (environ ${nb(lot / eurJpy)} € le lot). Un lot dépasse déjà 5 % d'un portefeuille de moins d'environ ${nb(Math.ceil(lot / eurJpy / 0.05 / 1000) * 1000)} €.</li>
+      <li>Liquidité : avec quelques centaines d'actions échangées par séance, une ligne de plusieurs lots se construit sur plusieurs jours, voire plusieurs semaines, toujours avec un ordre limité à ${yen(r.prixMaxNetEstate)} au plus. Ne jamais acheter « au marché » : un seul ordre pourrait faire monter le cours au-delà du prix maximal. La même prudence vaut à la revente.</li>
       <li>Objectif de vente : la VANT, soit ${yen(r.vantParAction)}. Vendre aussi si le potentiel restant passe sous 20 %, ou si la solvabilité passe sous 40 %.</li>
       <li>Revoir l'analyse à chaque publication semestrielle (mai et novembre) : VANE, durée de stockage, litige Nesco.</li>
       <li>Dans l'application : onglet Analyse, puis « Analyses publiées » et « Showa Paxxs ». Les outils VANN / VANE et RAPP se remplissent, et vous pouvez enregistrer la fiche dans votre coffre.</li>
