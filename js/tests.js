@@ -321,6 +321,16 @@
   verifier("Showa Paxxs : RAPP 3 ratios conformes, stocks à surveiller (décote suggérée)", JSON.stringify([sr.synthese.ok, sr.synthese.vigilance, sr.ratios[2].verdict, sr.ratios[2].decoteSuggeree]), JSON.stringify([3, 1, "vigilance", true]));
   verifier("Showa Paxxs : création de valeur 8,9 %/an contre 8,3 %/an pour le cours", JSON.stringify([arrondi(sr.ratios[3].rendement, 3), arrondi(sr.ratios[3].hausseCours, 3)]), JSON.stringify([0.089, 0.083]));
 
+  const sak = Publiees.find((x) => x.id === "4234-sun-a-kaken");
+  const kv = D.analyser(sak.fiches.vann);
+  verifier("Sun A. Kaken : VANN 655 ¥, VANE 1 931 ¥, VANT 2 419 ¥ par action", JSON.stringify([Math.round(kv.vannParAction), Math.round(kv.vaneParAction), Math.round(kv.vantParAction)]), JSON.stringify([655, 1931, 2419]));
+  verifier("Sun A. Kaken : cours = 178,7 % de la VANN, 60,6 % de la VANE", JSON.stringify([arrondi(kv.coursSurVann, 3), arrondi(kv.coursSurVane, 3)]), JSON.stringify([1.787, 0.606]));
+  verifier("Sun A. Kaken : prix maximal Net-Estate 1 352 ¥, verdict Net-Estate", JSON.stringify([Math.round(kv.prixMaxNetEstate), kv.verdict.code]), JSON.stringify([1352, "net-estate"]));
+  verifier("Sun A. Kaken : solvabilité maison 68,8 %, potentiel +107 %", JSON.stringify([arrondi(kv.solvabilite, 3), arrondi(kv.potentiel, 3)]), JSON.stringify([0.688, 1.067]));
+  const kr = M.rapp(Array.from({ length: 8 }, (_, i) => Object.fromEntries(["annee", "actions", "chiffreAffaires", "fraisGeneraux", "coutVentes", "stocks", "fondsPropres", "dividende", "cours"].map((k) => [k, sak.fiches.rapp[`a${i}_${k}`]]))), sak.fiches.rapp.tsr);
+  verifier("Sun A. Kaken : RAPP 2 conformes, 2 à surveiller, pas de décote suggérée sur les stocks", JSON.stringify([kr.synthese.ok, kr.synthese.vigilance, kr.ratios[2].decoteSuggeree]), JSON.stringify([2, 2, false]));
+  verifier("Sun A. Kaken : création de valeur 4,9 %/an contre 5,8 %/an pour le cours", JSON.stringify([arrondi(kr.ratios[3].rendement, 3), arrondi(kr.ratios[3].hausseCours, 3)]), JSON.stringify([0.049, 0.058]));
+
   // 9. Coffre chiffré (itérations réduites pour que le test reste instantané).
   async function testsCoffre() {
     if (!Coffre.disponible) { verifier("Coffre : chiffrement disponible dans ce navigateur", false, true); return; }

@@ -138,7 +138,7 @@ const html = `<!doctype html>
   <section class="bloc">
     <h2>1. La société</h2>
     <p>Showa Paxxs fabrique des emballages industriels. Son cœur de métier est le sac en papier kraft de grande contenance (ciment, résines, produits chimiques, alimentaire). Elle produit aussi des films plastiques et des conteneurs souples, et loue de l'immobilier. Elle compte 4 filiales consolidées, dont une en Thaïlande, et 681 salariés.</p>
-    <p>Actionnariat (septembre 2026) : Sanei Kaken 19,3 % et Shinsei Pulp &amp; Paper Trading 19,1 %. Deux partenaires industriels détiennent donc environ 38 % du capital, et des banques japonaises environ 8 %. Capitalisation : environ 13,1 Md¥ (environ 74 M€), ${nb(actions)} actions hors autocontrôle. Le cours vaut 0,46 fois les fonds propres comptables.</p>
+    <p>Actionnariat (septembre 2026) : <a href="4234-sun-a-kaken.html">Sun A. Kaken</a> 19,3 % et Shinsei Pulp &amp; Paper Trading 19,1 %. Deux partenaires industriels détiennent donc environ 38 % du capital, et des banques japonaises environ 8 %. Capitalisation : environ 13,1 Md¥ (environ 74 M€), ${nb(actions)} actions hors autocontrôle. Le cours vaut 0,46 fois les fonds propres comptables.</p>
     <p>Résultats : sur l'exercice clos en mars 2026, chiffre d'affaires de 23 564 M¥ et résultat net de 1 283 M¥. Au premier semestre de l'exercice en cours (avril-septembre 2026), les ventes progressent de 12,2 % et le résultat net de 62 %. Prévision de la société pour l'exercice : 25 000 M¥ de ventes, 1 350 M¥ de résultat net et 50 ¥ de dividende, soit un rendement de 1,7 %.</p>
   </section>
 
