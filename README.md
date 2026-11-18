@@ -25,7 +25,7 @@ Suivi de portefeuille boursier selon la méthode Net-Net / Daubasses. Outil pers
 - `js/gerants.js` et `js/vue-gerants.js` : suivi « Smart Money » des mouvements des gérants (agrégation par société et par thème, import CSV).
 - `js/vue-assurance.js` : simulateur d'assurance anti-krach (puts hors de la monnaie, Black-Scholes, comparaison sur 10 ans).
 - `js/analyses-publiees.js` : les fiches des analyses publiées (chiffres des comptes), chargeables dans les outils.
-- `analyses/` et `css/rapport.css` : une page de synthèse par analyse publiée, générée par un script de `outils/` (par exemple `node outils/analyse-4234-sun-a-kaken.js`) qui réutilise les modules de calcul.
+- `analyses/` et `css/rapport.css` : une page de synthèse par analyse publiée, générée par un script de `outils/` (par exemple `node outils/analyses-coree.js`, qui s'appuie sur le modèle commun `outils/modele-analyse.js`) qui réutilise les modules de calcul.
 - `js/tests.js` : les tests, exécutés à chaque chargement de la page.
 - `js/app.js` : l'interface.
 
@@ -53,6 +53,9 @@ Ouvrir `index.html` dans un navigateur. Pour lancer les tests seuls : `node js/t
 - Onglet Analyse, liste « Analyses publiées » : la fiche remplit les outils concernés (VANN / VANE, RAPP) ; « Enregistrer la fiche » la copie dans le coffre.
 - Les montants restent dans la devise des comptes de la société (liste « Devise des comptes »). Le portefeuille et le journal restent en euros : pour une société étrangère, le prix payé et l'objectif sont à convertir au cours du jour.
 - Chaque page de synthèse (`analyses/…`) détaille les sources, les calculs pas à pas, la sensibilité et le plan d'action. Les tests vérifient que la fiche redonne exactement les chiffres de la page.
+- [Daewon Sanup (005710, Séoul)](analyses/005710-daewon-sanup.html), 18 novembre 2026 : Net-Net (49,5 % de la VANN), trésorerie supérieure à deux fois la capitalisation.
+- [SYTS (002170, Séoul)](analyses/002170-syts.html), 18 novembre 2026 : Net-Net (41,1 % de la VANN), trésorerie nette supérieure à la capitalisation.
+- [Dongil Industries (004890, Séoul)](analyses/004890-dongil-industries.html), 18 novembre 2026 : Net-Net très profond (27,5 % de la VANN), deux alertes RAPP.
 - [Sun A. Kaken (4234, Tokyo)](analyses/4234-sun-a-kaken.html), 17 novembre 2026 : Net-Estate (60,6 % de la VANE), pas un Net-Net ; marge dépendante des bâtiments.
 - [Showa Paxxs (3954, Tokyo)](analyses/3954-showa-paxxs.html), 16 novembre 2026 : Net-Estate à la limite (69,7 % de la VANE), pas un Net-Net.
 
@@ -63,7 +66,7 @@ Ouvrir `index.html` dans un navigateur. Pour lancer les tests seuls : `node js/t
 - Itération 3 : actualisation des cours (Yahoo Finance, conversion en euros, rapport détaillé), journal des opérations avec mise à jour proposée de la ligne et du cash, place de cotation.
 - Itération 4 : classes d'actifs (actions décotées, ETF, or et matières premières), répartition, jauge du cash 5-15 %, courbe d'évolution (un point par jour), plus-value latente, simulateur d'intérêts composés ; analyses RAPP, holding et mine avec fiches enregistrées dans le coffre.
 - Itération 5 : carnet de bord (thèse obligatoire avant tout achat, raison de vente, notes de suivi, rotation sur 12 mois), radar de l'« action idéale » (critères Buffett, exemple Apple 10-K 2025), suivi des gérants, assurance anti-krach, momentum 12-1 activable seulement après acceptation explicite.
-- Analyses publiées : Showa Paxxs, Sun A. Kaken et devise des comptes dans les outils VANN / VANE et RAPP.
+- Analyses publiées : Showa Paxxs, Sun A. Kaken (Japon) ; Daewon Sanup, SYTS, Dongil Industries (Corée, montants en wons) et devise des comptes dans les outils VANN / VANE et RAPP.
 - À venir : installation sur téléphone (application web hors connexion).
 
 ## Sources des chiffres cités dans l'interface

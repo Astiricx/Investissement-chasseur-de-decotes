@@ -331,6 +331,17 @@
   verifier("Sun A. Kaken : RAPP 2 conformes, 2 à surveiller, pas de décote suggérée sur les stocks", JSON.stringify([kr.synthese.ok, kr.synthese.vigilance, kr.ratios[2].decoteSuggeree]), JSON.stringify([2, 2, false]));
   verifier("Sun A. Kaken : création de valeur 4,9 %/an contre 5,8 %/an pour le cours", JSON.stringify([arrondi(kr.ratios[3].rendement, 3), arrondi(kr.ratios[3].hausseCours, 3)]), JSON.stringify([0.049, 0.058]));
 
+  const coree = (id) => { const p = Publiees.find((x) => x.id === id); const v = D.analyser(p.fiches.vann);
+    const r = M.rapp(Array.from({ length: 8 }, (_, i) => Object.fromEntries(["annee", "actions", "chiffreAffaires", "fraisGeneraux", "coutVentes", "stocks", "fondsPropres", "dividende", "cours"].map((k) => [k, p.fiches.rapp[`a${i}_${k}`]]))), p.fiches.rapp.tsr);
+    return { v, r }; };
+  const dw = coree("005710-daewon-sanup"), sy = coree("002170-syts"), dg = coree("004890-dongil-industries");
+  verifier("Daewon Sanup : VANN 21 342 ₩, VANE 25 304 ₩, VANT 29 997 ₩, Net-Net à 49,5 %", JSON.stringify([Math.round(dw.v.vannParAction), Math.round(dw.v.vaneParAction), Math.round(dw.v.vantParAction), arrondi(dw.v.coursSurVann, 3), dw.v.verdict.code]), JSON.stringify([21342, 25304, 29997, 0.495, "net-net"]));
+  verifier("Daewon Sanup : prix maximal Net-Net 14 939 ₩, RAPP 3 conformes et 1 à surveiller", JSON.stringify([Math.round(dw.v.prixMaxNetNet), dw.r.synthese.ok, dw.r.synthese.vigilance]), JSON.stringify([14939, 3, 1]));
+  verifier("SYTS : VANN 118 747 ₩, VANT 178 609 ₩, Net-Net à 41,1 %", JSON.stringify([Math.round(sy.v.vannParAction), Math.round(sy.v.vantParAction), arrondi(sy.v.coursSurVann, 3), sy.v.verdict.code]), JSON.stringify([118747, 178609, 0.411, "net-net"]));
+  verifier("SYTS : RAPP 3 conformes, création de valeur 9,1 %/an", JSON.stringify([sy.r.synthese.ok, arrondi(sy.r.ratios[3].rendement, 3)]), JSON.stringify([3, 0.091]));
+  verifier("Dongil Industries : VANN 122 424 ₩ (stocks décotés de 20 %), Net-Net à 27,5 %", JSON.stringify([Math.round(dg.v.vannParAction), arrondi(dg.v.coursSurVann, 3), dg.v.verdict.code]), JSON.stringify([122424, 0.275, "net-net"]));
+  verifier("Dongil Industries : RAPP 1 conforme, 2 alertes, décote des stocks suggérée", JSON.stringify([dg.r.synthese.ok, dg.r.synthese.alerte, dg.r.ratios[2].decoteSuggeree]), JSON.stringify([1, 2, true]));
+
   // 9. Coffre chiffré (itérations réduites pour que le test reste instantané).
   async function testsCoffre() {
     if (!Coffre.disponible) { verifier("Coffre : chiffrement disponible dans ce navigateur", false, true); return; }

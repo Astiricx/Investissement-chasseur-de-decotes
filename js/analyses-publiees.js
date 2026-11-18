@@ -50,7 +50,105 @@
     });
   });
 
+  /** Fiche RAPP à partir de séries sur huit exercices (actions en millions, montants en millions, dividende et cours par action). */
+  function ficheRapp(nom, devise, tsr, s) {
+    const f = { nom, devise, tsr };
+    s.annees.forEach((a, i) => Object.assign(f, {
+      [`a${i}_annee`]: a, [`a${i}_actions`]: s.actions[i], [`a${i}_chiffreAffaires`]: s.ca[i], [`a${i}_fraisGeneraux`]: s.frais[i],
+      [`a${i}_coutVentes`]: s.cout[i], [`a${i}_stocks`]: s.stocks[i], [`a${i}_fondsPropres`]: s.fondsPropres[i],
+      [`a${i}_dividende`]: s.dividendes[i], [`a${i}_cours`]: s.cours[i],
+    }));
+    return f;
+  }
+
+  // Sociétés coréennes : exercices clos fin décembre 2018 à 2025, millions de wons (dividende et cours en wons).
+  // Sources : rapports annuels (사업보고서) sur DART ; frais = frais de vente et d'administration ; fonds propres =
+  // part du groupe ; actions = actions en circulation hors autocontrôle à la clôture ; cours de fin décembre (Yahoo Finance).
+  const ANNEES_KR = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
+  const TSR_KR = 0.03966; // obligation d'État coréenne à 10 ans, clôture du 17 novembre 2026
+  const DAEWON = {
+    annees: ANNEES_KR, actions: Array(8).fill(20.0376),
+    ca: [696997.7, 660965.7, 642639.9, 762636.4, 737040.6, 778642.6, 931473.1, 1058925.9],
+    frais: [21071.6, 20182.6, 21114.0, 30210.7, 28842.7, 20860.9, 24718.4, 36077.8],
+    cout: [645446.5, 614507.6, 593469.9, 702305.6, 676802.2, 710474.6, 831772.7, 952094.4],
+    stocks: [17954.1, 21035.4, 21035.9, 41630.5, 55601.3, 46047.1, 40473.5, 12992.7],
+    fondsPropres: [275238.2, 311378.1, 332306.5, 371808.4, 417662.4, 445755.8, 512394.6, 584505.6],
+    dividendes: [125, 125, 125, 125, 175, 175, 200, 250],
+    cours: [5810, 5380, 5600, 6150, 5640, 6110, 5920, 12970],
+  };
+  const SYTS = {
+    annees: ANNEES_KR, actions: [2.958599, 2.854407, 2.849425, 2.849425, 2.828618, 2.784, 2.661724, 2.64],
+    ca: [183198.3, 192107.5, 198417.1, 193958.6, 178800.8, 179258.4, 191310.5, 174685.1],
+    frais: [5091.3, 6998.7, 7494.9, 7680.1, 8260.5, 7802.5, 8374.3, 8280.1], // 2025 : marge brute − résultat d'exploitation
+    cout: [145980.7, 135672.1, 133225.6, 149891.2, 154095.1, 153771.9, 162944.4, 147962.7],
+    stocks: [45032.2, 42082.8, 40856.2, 60460.4, 63518.5, 61916.9, 56901.0, 53441.6],
+    fondsPropres: [292842.0, 328747.3, 375584.8, 406422.5, 417112.7, 431919.0, 434145.7, 453490.8],
+    dividendes: [750, 1000, 1250, 1250, 1500, 1500, 1500, 2300],
+    cours: [44500, 61700, 61500, 56300, 50900, 51000, 48400, 57100],
+  };
+  const DONGIL = {
+    annees: ANNEES_KR, actions: [2.185347, 2.166071, 2.166071, 2.166071, 2.166071, 2.166071, 2.166071, 2.141526],
+    ca: [391030.4, 354691.3, 333283.3, 464419.2, 498050.5, 441161.3, 415796.6, 347922.4],
+    frais: [16135.7, 16621.7, 16031.7, 21279.3, 21110.4, 19157.6, 22571.2, 19750.3],
+    cout: [357590.8, 339048.6, 315268.4, 401091.0, 454349.3, 426242.3, 397384.1, 330921.7],
+    stocks: [78463.7, 72780.4, 65172.3, 93531.3, 95929.4, 90267.8, 93642.8, 94556.9],
+    fondsPropres: [354937.4, 353804.8, 360482.4, 402036.8, 417277.2, 410077.1, 422764.7, 406422.0],
+    dividendes: [1500, 750, 1800, 4000, 3000, 1000, 1250, 1000],
+    cours: [58800, 53200, 78200, 158500, 194500, 45550, 39800, 38000],
+  };
+
   const PUBLIEES = Object.freeze([
+    {
+      id: "005710-daewon-sanup", societe: "Daewon Sanup", code: "005710", place: "KOSDAQ", devise: "KRW", date: "2026-11-18",
+      page: "analyses/005710-daewon-sanup.html",
+      resume: "Net-Net : cours de 10 570 ₩ = 49,5 % de la VANN (seuil 70 %), trésorerie supérieure à 2 fois la capitalisation, objectif VANT 29 997 ₩.",
+      fiches: {
+        // Bilan consolidé au 30 septembre 2026 (rapport trimestriel DART du 13/11/2026), millions de wons.
+        // Immeubles : terrains (24 754,1), bâtiments (65 781,3) et constructions (2 659,5) bruts au 31/12/2025 + immeubles de placement nets (6 054,4).
+        vann: {
+          nom: "Daewon Sanup (005710)", devise: "KRW", cours: 10570, nbActions: 20.0376, chiffreAffaires: 1058925.9,
+          tresorerie: 441259.8, creances: 134192.7, stocks: 13729.8, autresActifsCourants: 8923.5,
+          immeublesPrixAchat: 99249.3, incorporels: 939.3, goodwill: 0, impotsDifferesActifs: 16757.1,
+          totalBilan: 789238.7, capitauxPropres: 618769.4, minoritaires: 0, provisions: 0, dettesTotales: 170469.3,
+          decoteStocks: 0, decoteCreances: 0,
+        },
+        rapp: ficheRapp("Daewon Sanup (005710)", "KRW", TSR_KR, DAEWON),
+      },
+    },
+    {
+      id: "002170-syts", societe: "SYTS (ex-Samyang Tongsang)", code: "002170", place: "KOSPI", devise: "KRW", date: "2026-11-18",
+      page: "analyses/002170-syts.html",
+      resume: "Net-Net : cours de 48 750 ₩ = 41,1 % de la VANN (seuil 70 %), trésorerie nette supérieure à la capitalisation, objectif VANT 178 609 ₩.",
+      fiches: {
+        // Bilan consolidé au 30 septembre 2026 (rapport trimestriel DART), millions de wons.
+        // Immeubles : terrains (24 410,7), bâtiments (17 672,8), agencements (4 779,9) et constructions (9 445,5) bruts au 31/12/2025 + immeubles de placement nets (21 223,9).
+        vann: {
+          nom: "SYTS (002170)", devise: "KRW", cours: 48750, nbActions: 2.55072, chiffreAffaires: 174685.1,
+          tresorerie: 229428.7, creances: 34525.2, stocks: 58463.6, autresActifsCourants: 5096.0,
+          immeublesPrixAchat: 77532.8, incorporels: 816.5, goodwill: 0, impotsDifferesActifs: 0,
+          totalBilan: 481021.8, capitauxPropres: 456397.7, minoritaires: 0, provisions: 0, dettesTotales: 24624.1,
+          decoteStocks: 0, decoteCreances: 0,
+        },
+        rapp: ficheRapp("SYTS (002170)", "KRW", TSR_KR, SYTS),
+      },
+    },
+    {
+      id: "004890-dongil-industries", societe: "Dongil Industries", code: "004890", place: "KOSPI", devise: "KRW", date: "2026-11-18",
+      page: "analyses/004890-dongil-industries.html",
+      resume: "Net-Net très profond : cours de 33 650 ₩ = 27,5 % de la VANN (stocks décotés de 20 %), mais direction à surveiller (deux alertes RAPP).",
+      fiches: {
+        // Bilan consolidé au 30 septembre 2026 (rapport trimestriel DART), millions de wons.
+        // Immeubles : terrains (35 328,9) et bâtiments (48 153,9) bruts au 31/12/2025 + immeubles de placement nets (5 783,1).
+        vann: {
+          nom: "Dongil Industries (004890)", devise: "KRW", cours: 33650, nbActions: 2.141526, chiffreAffaires: 347922.4,
+          tresorerie: 145767.0, creances: 84785.7, stocks: 107864.5, autresActifsCourants: 3121.4,
+          immeublesPrixAchat: 89265.9, incorporels: 3379.5, goodwill: 0, impotsDifferesActifs: 7670.2,
+          totalBilan: 481901.4, capitauxPropres: 424109.0, minoritaires: 0, provisions: 0, dettesTotales: 57792.4,
+          decoteStocks: 0.20, decoteCreances: 0,
+        },
+        rapp: ficheRapp("Dongil Industries (004890)", "KRW", TSR_KR, DONGIL),
+      },
+    },
     {
       id: "4234-sun-a-kaken",
       societe: "Sun A. Kaken",

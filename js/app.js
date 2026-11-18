@@ -953,9 +953,9 @@
     ]],
   ];
   const TYPES = Object.fromEntries(CHAMPS.flatMap(([, cs]) => cs.map(([cle, , type]) => [cle, type || "nombre"])));
-  const DEVISES = ["EUR", "JPY", "USD", "GBP", "CHF", "NOK", "SEK", "DKK", "CAD", "AUD", "HKD"];
+  const DEVISES = ["EUR", "JPY", "KRW", "USD", "GBP", "CHF", "NOK", "SEK", "DKK", "CAD", "AUD", "HKD"];
   // Symboles affichés : courts quand ils sont sans ambiguïté (€, ¥, £), sinon l'abréviation française ($US, CHF…).
-  const SYMBOLES = { EUR: "€", JPY: "¥", GBP: "£", USD: "$US", CAD: "$CA", AUD: "$AU", HKD: "$HK", CHF: "CHF", NOK: "NOK", SEK: "SEK", DKK: "DKK" };
+  const SYMBOLES = { EUR: "€", JPY: "¥", KRW: "₩", GBP: "£", USD: "$US", CAD: "$CA", AUD: "$AU", HKD: "$HK", CHF: "CHF", NOK: "NOK", SEK: "SEK", DKK: "DKK" };
   /** Formats d'une devise : montant par action (f), symbole, et suffixe des montants en millions (« M€ », « M¥ », « M CHF »). */
   function formatsDevise(devise) {
     const code = DEVISES.includes(devise) ? devise : "EUR", symbole = SYMBOLES[code];
